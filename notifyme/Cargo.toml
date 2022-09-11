@@ -1,0 +1,9 @@
+[workspace]
+
+members = [
+    "message_queue",
+    "telegram_bot",
+    "adapter",
+    "repository",
+    "history",
+]
