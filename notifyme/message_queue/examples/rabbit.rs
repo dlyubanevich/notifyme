@@ -1,4 +1,3 @@
-
 use lapin::{
     message::DeliveryResult,
     options::{BasicAckOptions, BasicConsumeOptions, BasicPublishOptions, QueueDeclareOptions},
@@ -8,7 +7,6 @@ use lapin::{
 
 #[tokio::main]
 async fn main() {
-
     let uri = "amqp://localhost:5672";
     let options = ConnectionProperties::default()
         // Use tokio executor and reactor.
@@ -38,37 +36,38 @@ async fn main() {
         .await
         .unwrap();
 
-        //TODO Вот примерно так надо будет как-то устанавливать делегатов на получение сообщения
-       let string = String::new(); 
+    //TODO Вот примерно так надо будет как-то устанавливать делегатов на получение сообщения
+    let string = String::new();
 
-        let delegate = move |delivery: DeliveryResult| {
-            let mut string = string.clone(); 
-            async move {    
-        let delivery = match delivery {
-            // Carries the delivery alongside its channel
-            Ok(Some(delivery)) => delivery,
-            // The consumer got canceled
-            Ok(None) => return,
-            // Carries the error and is always followed by Ok(None)
-            Err(error) => {
-                dbg!("Failed to consume queue message {}", error);
-                return;
-            }
-        };
-        
-        string.push_str("string");
-        // Do something with the delivery data (The message payload)
+    let delegate = move |delivery: DeliveryResult| {
+        let mut string = string.clone();
+        async move {
+            let delivery = match delivery {
+                // Carries the delivery alongside its channel
+                Ok(Some(delivery)) => delivery,
+                // The consumer got canceled
+                Ok(None) => return,
+                // Carries the error and is always followed by Ok(None)
+                Err(error) => {
+                    dbg!("Failed to consume queue message {}", error);
+                    return;
+                }
+            };
 
-        delivery
-            .ack(BasicAckOptions::default())
-            .await
-            .expect("Failed to ack send_webhook_event message");
+            string.push_str("string");
+            // Do something with the delivery data (The message payload)
+
+            delivery
+                .ack(BasicAckOptions::default())
+                .await
+                .expect("Failed to ack send_webhook_event message");
         }
     };
 
     consumer.set_delegate(delegate);
 
-    channel.basic_publish(
+    channel
+        .basic_publish(
             "",
             "queue_test",
             BasicPublishOptions::default(),
@@ -79,5 +78,4 @@ async fn main() {
         .unwrap()
         .await
         .unwrap();
-        
 }
