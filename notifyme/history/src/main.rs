@@ -1,24 +1,26 @@
 use std::sync::Arc;
+use dotenv::dotenv;
 
-use history::{response_delegate, request_delegate, error_delegate, MessageHandler};
+use history::{repository::SqliteRepository, service::HistoryService, handler::MessageHandler};
+use history::handler::delegate;
 use message_queue::Client;
 use tokio::sync::Mutex;
-
 
 #[tokio::main]
 async fn main() {
 
-    let message_handler = Arc::new(Mutex::new(MessageHandler::new()));
+    dotenv().ok();
+
+    let url = std::env::var("DATABASE_URL").unwrap();
+    let queue = std::env::var("QUEUE").unwrap();
+
+    let repository = SqliteRepository::new(&url).await.unwrap();
+    let service = HistoryService::new(repository);
+    let message_handler = Arc::new(Mutex::new(MessageHandler::new(service)));
     
     let mut client = Client::new("amqp://localhost:5672").await;
-    client.with_consumer("request", request_delegate(message_handler.clone())).await;
-    client.with_consumer("response", response_delegate(message_handler.clone())).await;
-    client.with_consumer("error", error_delegate(message_handler.clone())).await;
+    client.with_consumer(&queue, delegate(message_handler.clone())).await;
 
     client.run();
 
-    //TODO
-    // Раскидать все по папкам
-    // Добавить SqliteRepository с записью всех сообщений
-    // Сделать через async трейт Repository, для того чтобы можно было использовать Mongo/Sqlite в зависимости от фич
 }

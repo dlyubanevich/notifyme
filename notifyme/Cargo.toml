@@ -3,7 +3,8 @@
 members = [
     "message_queue",
     "telegram_bot",
-    "adapter",
+    "controller",
     "repository",
     "history",
+    "domain",
 ]
