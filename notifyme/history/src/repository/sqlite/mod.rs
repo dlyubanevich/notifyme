@@ -19,6 +19,7 @@ impl SqliteRepository {
             Err(error) => return Err(DatabaseErrors::ConnectionError(error.to_string())),
         };
 
+        println!("{:?}", record);
         let result = sqlx::query!(
             r#"
             INSERT INTO users ( timestamp, user_id, data, event )
@@ -31,7 +32,7 @@ impl SqliteRepository {
         )
         .execute(&mut connection)
         .await;
-
+        connection.detach();
         match result {
             Err(error) => Err(DatabaseErrors::RequestError(error.to_string())),
             Ok(_) => Ok(()),
@@ -46,7 +47,7 @@ impl SqliteRepository {
             Ok(connection) => connection,
             Err(error) => return Err(DatabaseErrors::ConnectionError(error.to_string())),
         };
-
+        println!("{:?}", record);
         let result = sqlx::query!(
             r#"
             INSERT INTO customers ( timestamp, user_id, customer_id, data, event )
@@ -60,7 +61,7 @@ impl SqliteRepository {
         )
         .execute(&mut connection)
         .await;
-
+        connection.detach();
         match result {
             Err(error) => Err(DatabaseErrors::RequestError(error.to_string())),
             Ok(_) => Ok(()),

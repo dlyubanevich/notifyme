@@ -15,5 +15,8 @@ impl HistoryService {
             Record::UserEvent(record) => self.repository.add_user_event(record).await,
             Record::CustomerEvent(record) => self.repository.add_customer_event(record).await,
         };
+        if let Err(err) = result {
+            print!("Error: {}", err);
+        }
     }
 }
