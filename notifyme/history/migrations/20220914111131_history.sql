@@ -8,8 +8,8 @@ CREATE TABLE users
     id          INTEGER PRIMARY KEY AUTOINCREMENT   NOT NULL,
     timestamp   INTEGER                             NOT NULL, 
     user_id     INTEGER                             NOT NULL,
-    data        TEXT                                NOT NULL,
-    comment     TEXT                                NOT NULL
+    event       TEXT                                NOT NULL,
+    data        TEXT                                NOT NULL
 );
 
 CREATE TABLE customers
@@ -18,6 +18,6 @@ CREATE TABLE customers
     timestamp   INTEGER                             NOT NULL, 
     user_id     INTEGER                             NOT NULL,
     customer_id INTEGER                             NOT NULL,
-    data        TEXT                                NOT NULL,
-    comment     TEXT                                NOT NULL
+    event       TEXT                                NOT NULL,
+    data        TEXT                                NOT NULL 
 );

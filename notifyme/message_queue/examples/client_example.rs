@@ -1,17 +1,14 @@
 use lapin::{message::DeliveryResult, options::BasicAckOptions};
 use message_queue::Client;
 
-
 #[tokio::main]
 async fn main() {
-
     let uri = "amqp://localhost:5672";
     let mut client = Client::new(uri).await;
-    
+
     let publisher = client.get_publisher();
 
     let delegate = move |delivery: DeliveryResult| {
-
         let publisher = publisher.clone();
 
         async move {
@@ -29,8 +26,12 @@ async fn main() {
 
             // Do something with the delivery data (The message payload)
             let result = String::from_utf8_lossy(&delivery.data).to_string();
-            
-            publisher.lock().await.publish_message("exchange", "rooting_key", result).await;
+
+            publisher
+                .lock()
+                .await
+                .publish_message("exchange", "rooting_key", result)
+                .await;
 
             //println!("delivery message: [{}]", result);
 
@@ -43,4 +44,4 @@ async fn main() {
 
     client.with_consumer("test", delegate).await;
     client.run();
-} 
+}

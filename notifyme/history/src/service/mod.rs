@@ -2,7 +2,6 @@ use domain::records::Record;
 
 use crate::repository::SqliteRepository;
 
-
 pub struct HistoryService {
     repository: SqliteRepository,
 }

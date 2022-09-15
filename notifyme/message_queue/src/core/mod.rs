@@ -10,6 +10,8 @@ mod consumer;
 mod model;
 mod publisher;
 
+pub use publisher::Publisher;
+
 pub struct Client {
     connection: Connection,
     consumers: Vec<consumer::Consumer>,
@@ -39,10 +41,12 @@ impl Client {
         }
     }
     pub fn get_publisher(&self) -> Arc<Mutex<publisher::Publisher>> {
-        Arc::clone(&self.publisher) 
+        Arc::clone(&self.publisher)
     }
     pub async fn send_message(&mut self, exchange: &str, rooting_key: &str, message: String) {
-        self.publisher.lock().await
+        self.publisher
+            .lock()
+            .await
             .publish_message(exchange, rooting_key, message)
             .await;
         //TODO Тут вся проверка отправки сообщения. Если возвращаемое значение не Ок, то нужно хранить эти сообщения где-нибудь для последующей отправки
@@ -54,7 +58,7 @@ impl Client {
         self.consumers.push(consumer);
     }
 
-    pub fn run(self){
+    pub fn run(self) {
         self.connection.run().expect("connection run");
     }
     //TODO
@@ -67,12 +71,9 @@ impl Client {
 pub struct ClientBuilder {
     uri: &'static str,
     consumers: Vec<consumer::Consumer>,
-    
 }
 
-impl ClientBuilder {
-    
-}
+impl ClientBuilder {}
 #[cfg(test)]
 mod tests {
     use lapin::{message::DeliveryResult, options::BasicAckOptions};
@@ -93,7 +94,6 @@ mod tests {
 
     #[tokio::test]
     async fn should_handle_incomming_message() {
-
         let mut client = Client::new(URI).await;
         let message = "It is done".to_string();
 
@@ -113,13 +113,13 @@ mod tests {
                         return;
                     }
                 };
-    
+
                 let result = String::from_utf8_lossy(&delivery.data);
                 println!("delivery message: [{}]", result);
 
                 string.push_str("string");
                 // Do something with the delivery data (The message payload)
-    
+
                 delivery
                     .ack(BasicAckOptions::default())
                     .await
@@ -129,7 +129,6 @@ mod tests {
 
         client.with_consumer(QUEUE, delegate).await;
         client.send_message(EXCHANGE, ROUTING_KEY, message).await;
-
     }
 }
 

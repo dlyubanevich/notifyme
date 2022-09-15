@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use domain::records::Record;
-use lapin::{ConsumerDelegate, message::DeliveryResult, options::BasicAckOptions};
+use lapin::{message::DeliveryResult, options::BasicAckOptions, ConsumerDelegate};
 use tokio::sync::Mutex;
 
 use crate::service::HistoryService;
@@ -9,9 +9,9 @@ use crate::service::HistoryService;
 pub struct MessageHandler {
     service: HistoryService,
 }
-impl MessageHandler{
+impl MessageHandler {
     pub fn new(service: HistoryService) -> Self {
-        MessageHandler { service }  
+        MessageHandler { service }
     }
     pub async fn handle_message(&mut self, message: String) {
         let record: Record = serde_json::from_str(&message).unwrap();
@@ -19,10 +19,8 @@ impl MessageHandler{
     }
 }
 
-pub fn delegate(message_handler: Arc<Mutex<MessageHandler>>) -> impl ConsumerDelegate + 'static{
-
+pub fn delegate(message_handler: Arc<Mutex<MessageHandler>>) -> impl ConsumerDelegate + 'static {
     move |delivery: DeliveryResult| {
-
         let handler = message_handler.clone();
 
         async move {

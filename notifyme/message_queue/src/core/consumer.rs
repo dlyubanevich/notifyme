@@ -1,6 +1,11 @@
 use std::future::Future;
 
-use lapin::{options::{BasicConsumeOptions, BasicAckOptions}, types::FieldTable, Channel, ConsumerDelegate, message::DeliveryResult};
+use lapin::{
+    message::DeliveryResult,
+    options::{BasicAckOptions, BasicConsumeOptions},
+    types::FieldTable,
+    Channel, ConsumerDelegate,
+};
 
 pub struct Consumer {
     channel: Channel,
@@ -33,13 +38,11 @@ impl Consumer {
         }
     }
 
-    // async fn test_delegate<F> (channel: Channel, queue: &str, func: F) -> impl ConsumerDelegate + 'static 
+    // async fn test_delegate<F> (channel: Channel, queue: &str, func: F) -> impl ConsumerDelegate + 'static
     // where F: Future<Output = ()> + Send + Sync +'static {
 
     //      move |delivery: DeliveryResult| {
 
-            
-            
     //         async move {
     //             let delivery = match delivery {
     //                 // Carries the delivery alongside its channel
@@ -52,11 +55,11 @@ impl Consumer {
     //                     return;
     //                 }
     //             };
-    
+
     //             // Do something with the delivery data (The message payload)
     //             let result = String::from_utf8_lossy(&delivery.data).to_string();
     //             func.await;
-    
+
     //             delivery
     //                 .ack(BasicAckOptions::default())
     //                 .await
@@ -67,6 +70,6 @@ impl Consumer {
 }
 
 // pub struct ConsumerBuilder {
-//     //queue: &'static str,  
+//     //queue: &'static str,
 
 // }

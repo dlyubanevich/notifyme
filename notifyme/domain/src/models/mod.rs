@@ -1,30 +1,30 @@
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Customer {
-    name: String,
-    id: u32,
+    pub name: String,
+    pub id: u32,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Product {
-    name: String,
-    id: u32,
+    pub name: String,
+    pub id: u32,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct UserEventRecord {
-    timestamp: u64, 
-    user_id: u32, 
-    data: String, 
-    comment: String, 
+    pub timestamp: f64,
+    pub user_id: u32,
+    pub event: String,
+    pub data: String,
 }
 
-#[derive(Serialize, Deserialize)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct CustomerEventRecord {
-    timestamp: u64, 
-    user_id: u32, 
-    customer_id: u32,
-    data: String, 
-    comment: String, 
+    pub timestamp: f64,
+    pub user_id: u32,
+    pub customer_id: u32,
+    pub event: String,
+    pub data: String,
 }

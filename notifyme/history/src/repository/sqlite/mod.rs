@@ -1,6 +1,6 @@
-use domain::models::{UserEventRecord, CustomerEventRecord};
-use sqlx::SqlitePool;
 use crate::repository::common::errors::DatabaseErrors;
+use domain::models::{CustomerEventRecord, UserEventRecord};
+use sqlx::SqlitePool;
 
 pub struct SqliteRepository {
     pool: SqlitePool,
@@ -13,54 +13,57 @@ impl SqliteRepository {
             Err(error) => Err(DatabaseErrors::ConnectionError(error.to_string())),
         }
     }
-    pub async fn add_user_event(&mut self, record: UserEventRecord) -> Result<(),DatabaseErrors> {
+    pub async fn add_user_event(&mut self, record: UserEventRecord) -> Result<(), DatabaseErrors> {
         let mut connection = match self.pool.acquire().await {
             Ok(connection) => connection,
             Err(error) => return Err(DatabaseErrors::ConnectionError(error.to_string())),
         };
 
-        // let result = sqlx::query!(
-        //     r#"
-        //     INSERT INTO users ( timestamp, user_id, data, comment )
-        //     VALUES ( ?1, ?2, ?3, ?4 )
-        //     "#,
-        //     record.timestamp,
-        //     record.user_id,
-        //     record.data,
-        //     record.comment
-        // )
-        // .execute(&mut connection)
-        // .await;
+        let result = sqlx::query!(
+            r#"
+            INSERT INTO users ( timestamp, user_id, data, event )
+            VALUES ( ?1, ?2, ?3, ?4 )
+            "#,
+            record.timestamp,
+            record.user_id,
+            record.data,
+            record.event
+        )
+        .execute(&mut connection)
+        .await;
 
-        // match result {
-        //     Err(error) => Err(DatabaseErrors::RequestError(error.to_string())),
-        //     Ok(query_result) => Ok(()),
-        // }
-
-        Ok(())
+        match result {
+            Err(error) => Err(DatabaseErrors::RequestError(error.to_string())),
+            Ok(_) => Ok(()),
+        }
     }
 
-    pub async fn add_customer_event(&mut self, record: CustomerEventRecord) -> Result<(),DatabaseErrors> {
+    pub async fn add_customer_event(
+        &mut self,
+        record: CustomerEventRecord,
+    ) -> Result<(), DatabaseErrors> {
         let mut connection = match self.pool.acquire().await {
             Ok(connection) => connection,
             Err(error) => return Err(DatabaseErrors::ConnectionError(error.to_string())),
         };
 
-        // let result = sqlx::query!(
-        //     r#"
-        //     INSERT INTO rooms ( name )
-        //     VALUES ( ?1 )
-        //     "#,
-        //     room_name
-        // )
-        // .execute(&mut connection)
-        // .await;
+        let result = sqlx::query!(
+            r#"
+            INSERT INTO customers ( timestamp, user_id, customer_id, data, event )
+            VALUES ( ?1, ?2, ?3, ?4, ?5 )
+            "#,
+            record.timestamp,
+            record.user_id,
+            record.customer_id,
+            record.data,
+            record.event
+        )
+        .execute(&mut connection)
+        .await;
 
-        // match result {
-        //     Err(error) => Err(DatabaseErrors::RequestError(error.to_string())),
-        //     Ok(query_result) => Ok(()),
-        // }
-
-        Ok(())
+        match result {
+            Err(error) => Err(DatabaseErrors::RequestError(error.to_string())),
+            Ok(_) => Ok(()),
+        }
     }
 }
