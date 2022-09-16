@@ -164,11 +164,11 @@ impl TryFrom<&RepositoryResponse> for Record {
                 Ok(Record::CustomerEvent(record))
             }
             RepositoryResponse::Subscriptions {
-                user_id, customer, ..
+                user_id, ..
             } => {
                 let user_id = *user_id;
                 let event = "Response for subscriptions".to_string();
-                let customer_id = customer.id;
+                let customer_id = 0;
                 let record = CustomerEventRecord {
                     timestamp,
                     user_id,
@@ -180,13 +180,11 @@ impl TryFrom<&RepositoryResponse> for Record {
             }
             RepositoryResponse::NewNotification {
                 user_id,
-                customer,
-                notification,
                 ..
             } => {
                 let user_id = *user_id;
                 let event = "Response for new notification".to_string();
-                let customer_id = customer.id;
+                let customer_id = 0;
                 let record = CustomerEventRecord {
                     timestamp,
                     user_id,

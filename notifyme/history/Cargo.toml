@@ -12,7 +12,7 @@ lapin = "2.*"
 tokio = { version = "1.19.*", features = ["net", "macros", "rt-multi-thread"] }
 serde_derive = "1.0.*"
 serde_json = "1.0.*"
+serde = "1.0.*"
 sqlx = { version = "0.6.*", features = [ "runtime-tokio-rustls", "sqlite" ] }
-async-trait = "0.1.*"
 message_queue = { path = "../message_queue"}
 domain = { path = "../domain"}

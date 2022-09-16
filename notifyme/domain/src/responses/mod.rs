@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::models::{Customer, Product};
+use crate::models::{Customer, Product, Notification};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum Response {
@@ -20,6 +20,7 @@ pub enum Response {
     },
     CustomerAuthorizationSuccess {
         user_id: u32,
+        customer: Customer,
     },
     CustomerAuthorizationFailure {
         user_id: u32,
@@ -30,8 +31,7 @@ pub enum Response {
     },
     NewNotification {
         user_id: u32,
-        product: Product,
-        notification: String,
+        notifications: Vec<Notification>,
     },
 }
 
@@ -51,18 +51,15 @@ pub enum RepositoryResponse {
     },
     CustomerAuthorization {
         user_id: u32,
-        success: bool,
+        customer: Option<Customer>,
     },
     Subscriptions {
         user_id: u32,
-        customer: Customer,
         products: Vec<Product>,
     },
     NewNotification {
         user_id: u32,
-        customer: Customer,
-        product: Product,
-        notification: String,
+        notifications: Vec<Notification>,
     },
 }
 
@@ -88,11 +85,14 @@ impl TryFrom<&RepositoryResponse> for Response {
                     false => Ok(Response::SubscriptionFailure { user_id }),
                 }
             }
-            RepositoryResponse::CustomerAuthorization { user_id, success } => {
+            RepositoryResponse::CustomerAuthorization { user_id, customer } => {
                 let user_id = *user_id;
-                match *success {
-                    true => Ok(Response::CustomerAuthorizationSuccess { user_id }),
-                    false => Ok(Response::CustomerAuthorizationFailure { user_id }),
+                match customer {
+                    Some(customer) => {
+                        let customer = customer.clone();
+                        Ok(Response::CustomerAuthorizationSuccess { user_id, customer })
+                    },
+                    None => Ok(Response::CustomerAuthorizationFailure { user_id }),
                 }
             }
             RepositoryResponse::Subscriptions {
@@ -104,17 +104,14 @@ impl TryFrom<&RepositoryResponse> for Response {
             }
             RepositoryResponse::NewNotification {
                 user_id,
-                product,
-                notification,
+                notifications,
                 ..
             } => {
                 let user_id = *user_id;
-                let product = product.clone();
-                let notification = notification.to_string();
+                let notifications = notifications.clone();
                 Ok(Response::NewNotification {
                     user_id,
-                    product,
-                    notification,
+                    notifications,
                 })
             }
         }
