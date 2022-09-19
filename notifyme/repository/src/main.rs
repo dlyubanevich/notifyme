@@ -1,7 +1,6 @@
-
 use dotenv::dotenv;
 use message_queue::Client;
-use repository::{RepositoryService, MessageHandler, request_delegate, SqliteRepository};
+use repository::{request_delegate, MessageHandler, RepositoryService, SqliteRepository};
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -18,10 +17,7 @@ async fn main() {
     let message_handler = Arc::new(Mutex::new(MessageHandler::new(service)));
 
     client
-        .with_consumer(
-            &request_queue,
-            request_delegate(message_handler.clone()),
-        )
+        .with_consumer(&request_queue, request_delegate(message_handler.clone()))
         .await;
 
     client.run();

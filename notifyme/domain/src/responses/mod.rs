@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::models::{Customer, Product, Notification};
+use crate::models::{Customer, Notification, Product};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum Response {
@@ -91,7 +91,7 @@ impl TryFrom<&RepositoryResponse> for Response {
                     Some(customer) => {
                         let customer = customer.clone();
                         Ok(Response::CustomerAuthorizationSuccess { user_id, customer })
-                    },
+                    }
                     None => Ok(Response::CustomerAuthorizationFailure { user_id }),
                 }
             }

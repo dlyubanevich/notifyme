@@ -1,8 +1,8 @@
 use crate::RepositoryService;
 use domain::requests::RepositoryRequest;
 use lapin::{message::DeliveryResult, options::BasicAckOptions, ConsumerDelegate};
-use tokio::sync::Mutex;
 use std::sync::Arc;
+use tokio::sync::Mutex;
 
 pub struct MessageHandler {
     service: RepositoryService,

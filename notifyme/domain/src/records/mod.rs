@@ -163,9 +163,7 @@ impl TryFrom<&RepositoryResponse> for Record {
                 };
                 Ok(Record::CustomerEvent(record))
             }
-            RepositoryResponse::Subscriptions {
-                user_id, ..
-            } => {
+            RepositoryResponse::Subscriptions { user_id, .. } => {
                 let user_id = *user_id;
                 let event = "Response for subscriptions".to_string();
                 let customer_id = 0;
@@ -178,10 +176,7 @@ impl TryFrom<&RepositoryResponse> for Record {
                 };
                 Ok(Record::CustomerEvent(record))
             }
-            RepositoryResponse::NewNotification {
-                user_id,
-                ..
-            } => {
+            RepositoryResponse::NewNotification { user_id, .. } => {
                 let user_id = *user_id;
                 let event = "Response for new notification".to_string();
                 let customer_id = 0;

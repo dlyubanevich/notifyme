@@ -20,7 +20,12 @@ impl ControllerService {
         let repository_request_queue = std::env::var("REPOSITORY_REQUEST_QUEUE").unwrap();
         let history_queue = std::env::var("HISTORY_QUEUE").unwrap();
         let response_queue = std::env::var("RESPONSE_QUEUE").unwrap();
-        let config = Config {exchange, repository_request_queue, history_queue, response_queue};
+        let config = Config {
+            exchange,
+            repository_request_queue,
+            history_queue,
+            response_queue,
+        };
 
         Self { config, publisher }
     }

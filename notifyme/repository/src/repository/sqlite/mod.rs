@@ -1,4 +1,4 @@
-use domain::models::{Customer, Product, Notification};
+use domain::models::{Customer, Notification, Product};
 use sqlx::SqlitePool;
 
 use crate::repository::common::errors::DatabaseErrors;
@@ -33,8 +33,10 @@ impl SqliteRepository {
         Ok(result
             .unwrap()
             .iter()
-            .map(|record| 
-                Customer {id: record.id as u32, name: record.name.to_string() })
+            .map(|record| Customer {
+                id: record.id as u32,
+                name: record.name.to_string(),
+            })
             .collect())
     }
     pub async fn get_products(&self, customer_id: u32) -> Result<Vec<Product>, DatabaseErrors> {
@@ -60,11 +62,18 @@ impl SqliteRepository {
         Ok(result
             .unwrap()
             .iter()
-            .map(|record| 
-                Product {id: record.id as u32, name: record.name.to_string() })
+            .map(|record| Product {
+                id: record.id as u32,
+                name: record.name.to_string(),
+            })
             .collect())
     }
-    pub async fn add_subscription(&mut self, user_id: u32, customer_id: u32, product_id: u32) -> Result<(), DatabaseErrors> {
+    pub async fn add_subscription(
+        &mut self,
+        user_id: u32,
+        customer_id: u32,
+        product_id: u32,
+    ) -> Result<(), DatabaseErrors> {
         let mut transaction = match self.pool.begin().await {
             Ok(transaction) => transaction,
             Err(error) => return Err(DatabaseErrors::TransactionError(error.to_string())),
@@ -86,17 +95,21 @@ impl SqliteRepository {
 
         if let Err(error) = result {
             if let Err(error) = transaction.rollback().await {
-                return Err(DatabaseErrors::TransactionError(error.to_string()));    
+                return Err(DatabaseErrors::TransactionError(error.to_string()));
             }
             return Err(DatabaseErrors::RequestError(error.to_string()));
-        }        
+        }
         if let Err(error) = transaction.commit().await {
             return Err(DatabaseErrors::TransactionError(error.to_string()));
         }
 
         Ok(())
     }
-    pub async fn try_authorize(&self, user_id: u32, key: String) -> Result<Option<Customer>, DatabaseErrors> {
+    pub async fn try_authorize(
+        &self,
+        user_id: u32,
+        key: String,
+    ) -> Result<Option<Customer>, DatabaseErrors> {
         let result = sqlx::query!(
             r#"
             SELECT 
@@ -114,18 +127,20 @@ impl SqliteRepository {
         if let Err(error) = result {
             return Err(DatabaseErrors::RequestError(error.to_string()));
         }
-        
+
         let mut customers: Vec<Customer> = result
             .unwrap()
             .iter()
-            .map(|record| 
-                Customer {id: record.id as u32, name: record.name.to_string() })
+            .map(|record| Customer {
+                id: record.id as u32,
+                name: record.name.to_string(),
+            })
             .collect();
 
-        let customer = match customers.pop(){
+        let customer = match customers.pop() {
             Some(customer) => customer,
             None => return Ok(None),
-        };    
+        };
 
         let mut transaction = match self.pool.begin().await {
             Ok(transaction) => transaction,
@@ -151,11 +166,13 @@ impl SqliteRepository {
         if let Err(error) = transaction.commit().await {
             return Err(DatabaseErrors::TransactionError(error.to_string()));
         }
-        
-        Ok(Some(customer))
 
+        Ok(Some(customer))
     }
-    pub async fn get_subscriptions(&self, customer_id: u32) -> Result<Vec<Product>, DatabaseErrors> {
+    pub async fn get_subscriptions(
+        &self,
+        customer_id: u32,
+    ) -> Result<Vec<Product>, DatabaseErrors> {
         let result = sqlx::query!(
             r#"
             SELECT 
@@ -179,12 +196,18 @@ impl SqliteRepository {
         Ok(result
             .unwrap()
             .iter()
-            .map(|record| 
-                Product {id: record.id as u32, name: record.name.to_string()} )
-            .collect()
-        )
+            .map(|record| Product {
+                id: record.id as u32,
+                name: record.name.to_string(),
+            })
+            .collect())
     }
-    pub async fn add_notification(&mut self, customer_id: u32, product_id: u32, text: String) -> Result<Vec<Notification>, DatabaseErrors> {
+    pub async fn add_notification(
+        &mut self,
+        customer_id: u32,
+        product_id: u32,
+        text: String,
+    ) -> Result<Vec<Notification>, DatabaseErrors> {
         let result = sqlx::query!(
             r#"
             SELECT 
@@ -209,19 +232,24 @@ impl SqliteRepository {
         if let Err(error) = result {
             return Err(DatabaseErrors::RequestError(error.to_string()));
         }
-        
+
         let notifications: Vec<Notification> = result
             .unwrap()
             .iter()
-            .map(|record| 
-                Notification {
-                    user_id: record.user_id as u32,
-                    customer: Customer {id: record.customer_id as u32, name: record.customer_name.to_string() },
-                    product: Product {id: record.product_id as u32, name: record.product_name.to_string() },
-                    text: text.clone() 
-                })
+            .map(|record| Notification {
+                user_id: record.user_id as u32,
+                customer: Customer {
+                    id: record.customer_id as u32,
+                    name: record.customer_name.to_string(),
+                },
+                product: Product {
+                    id: record.product_id as u32,
+                    name: record.product_name.to_string(),
+                },
+                text: text.clone(),
+            })
             .collect();
-        
+
         let mut transaction = match self.pool.begin().await {
             Ok(transaction) => transaction,
             Err(error) => return Err(DatabaseErrors::TransactionError(error.to_string())),
@@ -243,10 +271,10 @@ impl SqliteRepository {
 
         if let Err(error) = result {
             if let Err(error) = transaction.rollback().await {
-                return Err(DatabaseErrors::TransactionError(error.to_string()));    
+                return Err(DatabaseErrors::TransactionError(error.to_string()));
             }
             return Err(DatabaseErrors::RequestError(error.to_string()));
-        }        
+        }
         if let Err(error) = transaction.commit().await {
             return Err(DatabaseErrors::TransactionError(error.to_string()));
         }

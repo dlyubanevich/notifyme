@@ -21,10 +21,7 @@ async fn main() {
     let message_handler = Arc::new(Mutex::new(MessageHandler::new(service)));
 
     client
-        .with_consumer(
-            &request_queue,
-            request_delegate(message_handler.clone()),
-        )
+        .with_consumer(&request_queue, request_delegate(message_handler.clone()))
         .await;
     client
         .with_consumer(
