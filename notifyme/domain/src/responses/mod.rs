@@ -6,11 +6,11 @@ use crate::models::{Customer, Notification, Product};
 pub enum Response {
     Customers {
         user_id: u32,
-        customers: Vec<Customer>,
+        customers: Vec<String>,
     },
     Products {
         user_id: u32,
-        products: Vec<Product>,
+        products: Vec<String>,
     },
     SubscriptionSuccess {
         user_id: u32,
@@ -27,7 +27,7 @@ pub enum Response {
     },
     Subscriptions {
         user_id: u32,
-        products: Vec<Product>,
+        products: Vec<String>,
     },
     NewNotification {
         user_id: u32,
@@ -63,57 +63,14 @@ pub enum RepositoryResponse {
     },
 }
 
-impl TryFrom<&RepositoryResponse> for Response {
-    type Error = ();
+impl ToString for Response {
+    fn to_string(&self) -> String {
+        serde_json::to_string(&self).unwrap()
+    }
+}
 
-    fn try_from(value: &RepositoryResponse) -> Result<Self, Self::Error> {
-        match value {
-            RepositoryResponse::Customers { user_id, customers } => {
-                let user_id = *user_id;
-                let customers = customers.clone();
-                Ok(Response::Customers { user_id, customers })
-            }
-            RepositoryResponse::Products { user_id, products } => {
-                let user_id = *user_id;
-                let products = products.clone();
-                Ok(Response::Products { user_id, products })
-            }
-            RepositoryResponse::NewSubscription { user_id, success } => {
-                let user_id = *user_id;
-                match *success {
-                    true => Ok(Response::SubscriptionSuccess { user_id }),
-                    false => Ok(Response::SubscriptionFailure { user_id }),
-                }
-            }
-            RepositoryResponse::CustomerAuthorization { user_id, customer } => {
-                let user_id = *user_id;
-                match customer {
-                    Some(customer) => {
-                        let customer = customer.clone();
-                        Ok(Response::CustomerAuthorizationSuccess { user_id, customer })
-                    }
-                    None => Ok(Response::CustomerAuthorizationFailure { user_id }),
-                }
-            }
-            RepositoryResponse::Subscriptions {
-                user_id, products, ..
-            } => {
-                let user_id = *user_id;
-                let products = products.clone();
-                Ok(Response::Subscriptions { user_id, products })
-            }
-            RepositoryResponse::NewNotification {
-                user_id,
-                notifications,
-                ..
-            } => {
-                let user_id = *user_id;
-                let notifications = notifications.clone();
-                Ok(Response::NewNotification {
-                    user_id,
-                    notifications,
-                })
-            }
-        }
+impl ToString for RepositoryResponse {
+    fn to_string(&self) -> String {
+        serde_json::to_string(&self).unwrap()
     }
 }

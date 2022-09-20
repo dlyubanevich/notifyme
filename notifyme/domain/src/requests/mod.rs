@@ -9,12 +9,12 @@ pub enum Request {
     },
     Products {
         user_id: u32,
-        customer: Customer,
+        customer: String,
     },
     NewSubscription {
         user_id: u32,
-        customer: Customer,
-        product: Product,
+        customer: String,
+        product: String,
     },
     CustomerAuthorization {
         user_id: u32,
@@ -62,72 +62,13 @@ pub enum RepositoryRequest {
     },
 }
 
-impl TryFrom<&Request> for RepositoryRequest {
-    type Error = ();
-
-    fn try_from(value: &Request) -> Result<Self, Self::Error> {
-        match value {
-            Request::Customers { user_id } => {
-                let user_id = *user_id;
-                Ok(RepositoryRequest::Customers { user_id })
-            }
-            Request::Products { user_id, customer } => {
-                let user_id = *user_id;
-                let customer_id = customer.id;
-                Ok(RepositoryRequest::Products {
-                    user_id,
-                    customer_id,
-                })
-            }
-            Request::NewSubscription {
-                user_id,
-                customer,
-                product,
-            } => {
-                let user_id = *user_id;
-                let customer_id = customer.id;
-                let product_id = product.id;
-                Ok(RepositoryRequest::NewSubscription {
-                    user_id,
-                    customer_id,
-                    product_id,
-                })
-            }
-            Request::CustomerAuthorization { user_id, key } => {
-                let user_id = *user_id;
-                let key = key.to_string();
-                Ok(RepositoryRequest::CustomerAuthorization { user_id, key })
-            }
-            Request::Subscriptions { user_id, customer } => {
-                let user_id = *user_id;
-                let customer_id = customer.id;
-                Ok(RepositoryRequest::Subscriptions {
-                    user_id,
-                    customer_id,
-                })
-            }
-            Request::NewNotification {
-                user_id,
-                customer,
-                product,
-                notification,
-            } => {
-                let user_id = *user_id;
-                let customer_id = customer.id;
-                let product_id = product.id;
-                let notification = notification.to_string();
-                Ok(RepositoryRequest::NewNotification {
-                    user_id,
-                    customer_id,
-                    product_id,
-                    notification,
-                })
-            }
-        }
+impl ToString for Request {
+    fn to_string(&self) -> String {
+        serde_json::to_string(&self).unwrap()
     }
 }
 
-impl ToString for Request {
+impl ToString for RepositoryRequest {
     fn to_string(&self) -> String {
         serde_json::to_string(&self).unwrap()
     }

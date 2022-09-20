@@ -10,7 +10,10 @@ pub struct Customer {
 
 impl Customer {
     pub fn new(name: &str) -> Self {
-        Customer { name: name.to_owned(), id: 1 }   
+        Customer {
+            name: name.to_owned(),
+            id: 1,
+        }
     }
 }
 
@@ -22,7 +25,10 @@ pub struct Product {
 
 impl Product {
     pub fn new(name: &str) -> Self {
-        Product { name: name.to_owned(), id: 1 }   
+        Product {
+            name: name.to_owned(),
+            id: 1,
+        }
     }
 }
 #[derive(Serialize, Deserialize, Debug, Clone)]

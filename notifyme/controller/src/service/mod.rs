@@ -1,13 +1,11 @@
-use std::{convert::TryFrom, sync::Arc};
+use std::sync::Arc;
 
-use domain::{
-    records::Record,
-    requests::{RepositoryRequest, Request},
-    responses::{RepositoryResponse, Response},
-};
+use domain::{requests::Request, responses::RepositoryResponse};
 use message_queue::Publisher;
 use serde::Deserialize;
 use tokio::sync::Mutex;
+
+use crate::transform;
 
 pub struct ControllerService {
     config: Config,
@@ -30,43 +28,43 @@ impl ControllerService {
         Self { config, publisher }
     }
     pub async fn handle_request(&mut self, request: Request) {
-        let record = Record::try_from(&request).unwrap();
-        let repository_request = RepositoryRequest::try_from(&request).unwrap();
+        let record = transform::request_to_record(&request);
+        let repository_request = transform::request_to_repository_request(&request);
 
         let mut publisher = self.publisher.lock().await;
         publisher
             .publish_message(
                 &self.config.exchange,
                 &self.config.history_queue,
-                serde_json::to_string(&record).unwrap(),
+                record.to_string(),
             )
             .await;
         publisher
             .publish_message(
                 &self.config.exchange,
                 &self.config.repository_request_queue,
-                serde_json::to_string(&repository_request).unwrap().clone(),
+                repository_request.to_string(),
             )
             .await;
     }
 
-    pub async fn handle_repository_response(&mut self, response: RepositoryResponse) {
-        let record = Record::try_from(&response).unwrap();
-        let response = Response::try_from(&response).unwrap();
+    pub async fn handle_repository_response(&mut self, repository_response: RepositoryResponse) {
+        let record = transform::repository_response_to_record(&repository_response);
+        let response = transform::repository_response_to_response(&repository_response);
 
         let mut publisher = self.publisher.lock().await;
         publisher
             .publish_message(
                 &self.config.exchange,
                 &self.config.history_queue,
-                serde_json::to_string(&record).unwrap(),
+                record.to_string(),
             )
             .await;
         publisher
             .publish_message(
                 &self.config.exchange,
                 &self.config.response_queue,
-                serde_json::to_string(&response).unwrap(),
+                response.to_string(),
             )
             .await;
     }

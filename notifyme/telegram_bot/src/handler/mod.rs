@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use domain::responses::Response;
-use lapin::{ConsumerDelegate, message::DeliveryResult, options::BasicAckOptions};
+use lapin::{message::DeliveryResult, options::BasicAckOptions, ConsumerDelegate};
 use tokio::sync::Mutex;
 
 use crate::service::Service;
