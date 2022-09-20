@@ -126,3 +126,9 @@ impl TryFrom<&Request> for RepositoryRequest {
         }
     }
 }
+
+impl ToString for Request {
+    fn to_string(&self) -> String {
+        serde_json::to_string(&self).unwrap()
+    }
+}

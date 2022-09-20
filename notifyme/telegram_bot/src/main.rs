@@ -1,5 +1,5 @@
 
-use std::sync::Arc;
+use std::{sync::Arc, str::FromStr};
 
 use domain::{models::{Customer, Product}, requests::Request};
 use dotenv::dotenv;
@@ -9,9 +9,11 @@ use teloxide::{
     prelude::{AutoSend, Dispatcher, LoggingErrorHandler},
     requests::{Requester, RequesterExt},
     respond,
-    types::{Message, Update},
+    types::{Message, Update, CallbackQuery, InlineQuery, InlineQueryResultArticle, InputMessageContentText, InputMessageContent, InlineKeyboardMarkup, InlineKeyboardButton},
     Bot, dptree,
 };
+use telegram_bot::{Service, StateStorage, MessageHandler, response_delegate};
+
 use tokio::sync::Mutex;
 use url::Url;
 
@@ -26,126 +28,162 @@ async fn main() {
 
     let token = std::env::var("TELOXIDE_TOKEN").unwrap();
 
-    let client = Client::new("amqp://localhost:5672").await;
-    let params = ConfigParams {
-        publisher:  client.get_publisher()   
-    };
-
     let bot = Bot::new(token).auto_send();
     let addr = ([127, 0, 0, 1], 8080).into();
-    let url = Url::parse("https://5aff-95-27-196-48.eu.ngrok.io").unwrap();
+    let url = Url::parse("https://0b74-95-27-196-32.eu.ngrok.io").unwrap();
     let listener = webhooks::axum(bot.clone(), webhooks::Options::new(addr, url))
         .await
         .expect("Couldn't setup webhook");
 
-    let message_handler = Update::filter_message()
-        .enter_dialogue::<Update, InMemStorage<State>, State>()
-        .branch(dptree::case![State::Start].endpoint(start))
-        .branch(dptree::case![State::Customer].endpoint(set_customer))
-        .branch(dptree::case![State::Product { customer }].endpoint(set_product))
-        .branch(
-            dptree::case![State::Confirm { customer, product }].endpoint(confirm),
-        );
+    let service = Service::new(bot.clone());
+    let queue_handler = Arc::new(Mutex::new(MessageHandler::new(service)));
 
-   // let callback_query_handler = Update::filter_callback_query().endpoint(callback);
+    let mut client = Client::new("amqp://localhost:5672").await;
+    client.with_consumer("response", response_delegate(queue_handler)).await;
 
-    let handler = dialogue::enter::<Update, InMemStorage<State>, State, _>()
+    let message_handler = Update::filter_message().endpoint(message_handler);
+    let callback_query_handler = Update::filter_callback_query().endpoint(callback_handler);
+    let inline_query_handler = Update::filter_inline_query().endpoint(inline_handler);
+
+    let handler = dptree::entry()
         .branch(message_handler)
-        //.branch(callback_query_handler)
-        ;
+        .branch(callback_query_handler)
+        .branch(inline_query_handler);
    
-     Dispatcher::builder(bot, handler)
-        .dependencies(dptree::deps![InMemStorage::<State>::new(), params])
+    let state_storage = StateStorage::<State>::new();
+    let params = ConfigParams {
+        publisher:  client.get_publisher()   
+    };
+
+    Dispatcher::builder(bot, handler)
+        .dependencies(dptree::deps![state_storage, params])
         .enable_ctrlc_handler()
         .build()
         .dispatch_with_listener(listener, LoggingErrorHandler::with_custom_text("main::An error from the update listener"))
         .await;
 }
 
-async fn answer(message: Message, bot: AutoSend<Bot>) -> Result<(), teloxide::RequestError> {
-    log::info!("Message = [{}]", message.text().unwrap());
-    bot.send_message(message.chat.id, "pong").await?;
-    respond(())
-}
-
-
 #[derive(Clone)]
 struct ConfigParams {
     publisher: Arc<Mutex<Publisher>>
 }
-type MyDialogue = teloxide::prelude::Dialogue<State, InMemStorage<State>>;
+
 type HandlerResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
-async fn start(bot: AutoSend<Bot>, msg: Message, dialogue: MyDialogue, params: ConfigParams) -> HandlerResult { 
-    log::info!("Start for user [{}]", msg.chat.id.0);
-    let x = Request::Customers{user_id: msg.chat.id.0 as u32};
-    let message = serde_json::to_string(&x).unwrap();
-    params.publisher.lock().await.publish_message("notifyme", "request", message).await;
-    bot.send_message(msg.chat.id, "Выберите поставщика:").await?;
+async fn message_handler(bot: AutoSend<Bot>, msg: Message, storage: Arc<StateStorage<State>>, params: ConfigParams) -> HandlerResult { 
+    log::info!("Message from user [{}]", msg.chat.id.0);
+    let state = match storage.get_state(&msg.chat.id).await {
+        Some(state) => state,
+        None => {
+            State::Start   
+        },
+    };
     
-    dialogue.update(State::Customer).await?;
-    Ok(())
-}
-
-async fn set_customer(bot: AutoSend<Bot>, msg: Message, dialogue: MyDialogue, params: ConfigParams) -> HandlerResult {
-    log::info!("Customer for user [{}]", msg.chat.id.0);
-    match msg.text().map(|text| {
-        let cus: Customer = serde_json::from_str(text).unwrap();
-        cus
-    }) {
-        Some(customer) => {
-            bot.send_message(msg.chat.id, "Выберите интересующий вас продукт:").await?;
-            dialogue.update(State::Product { customer }).await?;    
-        }
-        None => {
-            bot.send_message(msg.chat.id, "Выберите поставщика из представленного списка, пожалуйста!").await?;    
-        },
+    match state {
+        State::Start => choose_customer(msg, storage, params).await?,
+        State::Customer => choose_product(msg, storage, params).await?,
+        State::Product { customer } => add_subscription(msg, storage, params, customer).await?,
+        State::End => choose_customer(msg, storage, params).await?, //Костыль
     }
+
     Ok(())
 }
 
-async fn set_product(bot: AutoSend<Bot>, msg: Message, dialogue: MyDialogue, publisher: Arc<Mutex<Publisher>>, customer: Customer) -> HandlerResult {
-    log::info!("Product for user [{}]", msg.chat.id.0);
-    match msg.text().map(|text| {
-        let product: Product = serde_json::from_str(text).unwrap();
-        product
-    }) {
-        Some(product) => {
-            bot.send_message(msg.chat.id, "Выберите интересующий вас продукт:").await?;
-            dialogue.update(State::Confirm { customer, product }).await?;    
+async fn choose_customer(msg: Message, storage: Arc<StateStorage<State>>, params: ConfigParams) -> HandlerResult {
+    log::info!("Choose customer for user [{}]", msg.chat.id.0);
+    let message = Request::Customers{user_id: msg.chat.id.0 as u32}.to_string();
+    params.publisher.lock().await.publish_message("notifyme", "request", message).await;
+    storage.set_state(msg.chat.id, State::Customer).await;
+    Ok(())
+}
+
+async fn choose_product(msg: Message, storage: Arc<StateStorage<State>>, params: ConfigParams) -> HandlerResult {
+    log::info!("choose product for user [{}]", msg.chat.id.0);
+    let customer = Customer::new(msg.text().unwrap());
+    let message = Request::Products { user_id: msg.chat.id.0 as u32, customer: customer.clone() }.to_string();
+    params.publisher.lock().await.publish_message("notifyme", "request", message).await;
+    storage.set_state(msg.chat.id, State::Product{customer}).await;
+    Ok(())
+}
+
+async fn add_subscription(msg: Message, storage: Arc<StateStorage<State>>, params: ConfigParams, customer: Customer) -> HandlerResult {
+    log::info!("add subscription for user [{}]", msg.chat.id.0);
+    let product = Product::new(msg.text().unwrap());
+    let message = Request::NewSubscription { user_id: msg.chat.id.0 as u32, customer, product }.to_string();
+    params.publisher.lock().await.publish_message("notifyme", "request", message).await;
+    storage.set_state(msg.chat.id, State::End).await;
+    Ok(())
+}
+
+
+async fn callback_handler(
+    q: CallbackQuery,
+    bot: AutoSend<Bot>,
+) -> HandlerResult {
+    
+    if let Some(version) = q.data {
+        log::info!("Callback [{}]", version);
+        let text = format!("You chose: {version}");
+
+        match q.message {
+            Some(Message { id, chat, .. }) => {
+                bot.edit_message_text(chat.id, id, text).await?;
+            }
+            None => {
+                if let Some(id) = q.inline_message_id {
+                    bot.edit_message_text_inline(id, text).await?;
+                }
+            }
         }
-        None => {
-            bot.send_message(msg.chat.id, "Выберите продукт из представленного списка, пожалуйста!").await?;    
-        },
+
+        log::info!("You chose: {}", version);
+    } else {
+        log::info!("None of callback");   
     }
+
     Ok(())
 }
 
-async fn confirm(bot: AutoSend<Bot>, msg: Message, dialogue: MyDialogue, publisher: Arc<Mutex<Publisher>>, customer: Customer, product: Product) -> HandlerResult {
-    log::info!("Confirm for user [{}]", msg.chat.id.0);
-    match msg.text() {
-        Some(product) => {
-            bot.send_message(msg.chat.id, "Подписка успешно оформлена!").await?;
-            dialogue.update(State::End).await?;    
-        }
-        None => {
-            bot.send_message(msg.chat.id, "Выберите продукт из представленного списка, пожалуйста!").await?;    
-        },
+fn make_keyboard() -> InlineKeyboardMarkup {
+    let mut keyboard: Vec<Vec<InlineKeyboardButton>> = vec![];
+
+    let debian_versions = [
+        "Buzz", "Rex", "Bo", "Hamm", "Slink", "Potato", "Woody", "Sarge", "Etch", "Lenny",
+        "Squeeze", "Wheezy", "Jessie", "Stretch", "Buster", "Bullseye",
+    ];
+
+    for versions in debian_versions.chunks(3) {
+        let row = versions
+            .iter()
+            .map(|&version| InlineKeyboardButton::callback(version.to_owned(), version.to_owned()))
+            .collect();
+
+        keyboard.push(row);
     }
-    Ok(())
+
+    InlineKeyboardMarkup::new(keyboard)
 }
 
+async fn inline_handler(
+    q: InlineQuery,
+    bot: AutoSend<Bot>,
+) -> HandlerResult {
+    let choose_debian_version = InlineQueryResultArticle::new(
+        "0",
+        "Chose debian version",
+        InputMessageContent::Text(InputMessageContentText::new("Debian versions:")),
+    )
+    .reply_markup(make_keyboard());
+
+    bot.answer_inline_query(q.id, vec![choose_debian_version.into()]).await?;
+
+    Ok(())
+}
 
 #[derive(Clone)]
 enum State {
     Start,
     Customer,
     Product {customer: Customer},
-    Confirm {customer: Customer, product: Product},
     End,
-}
-impl Default for State {
-    fn default() -> Self {
-        Self::Start
-    }
 }
