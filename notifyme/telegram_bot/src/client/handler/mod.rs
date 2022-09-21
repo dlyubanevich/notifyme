@@ -4,7 +4,7 @@ use domain::responses::Response;
 use lapin::{message::DeliveryResult, options::BasicAckOptions, ConsumerDelegate};
 use tokio::sync::Mutex;
 
-use crate::service::Service;
+use crate::client::Service;
 
 pub struct MessageHandler {
     service: Service,

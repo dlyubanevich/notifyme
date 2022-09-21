@@ -5,7 +5,8 @@ use domain::{
 };
 use dotenv::dotenv;
 use message_queue::{Client, Publisher};
-use telegram_bot::{response_delegate, MessageHandler, Service, StateStorage};
+use telegram_bot::{client::{MessageHandler, Service, response_delegate,state::State}, storage::StateStorage };
+
 use teloxide::{
     dispatching::{update_listeners::webhooks, UpdateFilterExt},
     dptree,
@@ -188,10 +189,4 @@ async fn callback_handler(q: CallbackQuery, bot: AutoSend<Bot>) -> HandlerResult
     Ok(())
 }
 
-#[derive(Clone)]
-enum State {
-    Start,
-    Customer,
-    Product { customer: String },
-    End,
-}
+
