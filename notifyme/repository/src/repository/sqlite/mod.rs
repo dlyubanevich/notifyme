@@ -20,25 +20,28 @@ impl SqliteRepository {
             Err(error) => Err(DatabaseErrors::ConnectionError(error.to_string())),
         }
     }
+
     pub async fn get_customers(&self) -> Result<Vec<String>, DatabaseErrors> {
         Ok(self.hash_data.get_customers())
     }
-    pub async fn get_products(&self, customer: String) -> Result<Vec<String>, DatabaseErrors> {
-        Ok(self.hash_data.get_customer_products(&customer))
+
+    pub async fn get_products(&self, customer: &str) -> Result<Vec<String>, DatabaseErrors> {
+        Ok(self.hash_data.get_customer_products(customer))
     }
+
     pub async fn add_subscription(
         &mut self,
         user_id: u32,
-        customer: String,
-        product: String,
+        customer: &str,
+        product: &str,
     ) -> Result<(), DatabaseErrors> {
         let mut transaction = match self.pool.begin().await {
             Ok(transaction) => transaction,
             Err(error) => return Err(DatabaseErrors::TransactionError(error.to_string())),
         };
 
-        let customer_id = self.hash_data.get_customer_id(&customer);
-        let product_id = self.hash_data.get_product_id(&product);
+        let customer_id = self.hash_data.get_customer_id(customer);
+        let product_id = self.hash_data.get_product_id(customer, product);
         let result = sqlx::query!(
             r#"
             INSERT INTO 
@@ -49,6 +52,180 @@ impl SqliteRepository {
             user_id,
             customer_id,
             product_id
+        )
+        .execute(&mut transaction)
+        .await;
+
+        if let Err(error) = result {
+            return Err(DatabaseErrors::RequestError(error.to_string()));
+        }
+        let subscription_id = result.unwrap().last_insert_rowid();
+
+        let result = sqlx::query!(
+            r#"
+            INSERT INTO 
+                active_subscriptions ( subscription_id )
+            VALUES 
+                ( ?1 )
+            "#,
+            subscription_id
+        )
+        .execute(&mut transaction)
+        .await;
+
+        if let Err(error) = result {
+            if let Err(error) = transaction.rollback().await {
+                return Err(DatabaseErrors::TransactionError(error.to_string()));
+            }
+            return Err(DatabaseErrors::RequestError(error.to_string()));
+        }
+
+        if let Err(error) = transaction.commit().await {
+            return Err(DatabaseErrors::TransactionError(error.to_string()));
+        }
+
+        Ok(())
+    }
+
+    pub async fn try_authorize(
+        &self,
+        user_id: u32,
+        key: String,
+    ) -> Result<Option<String>, DatabaseErrors> {
+        let result = sqlx::query!(
+            r#"
+            SELECT 
+                name 
+            FROM 
+                customers 
+            WHERE
+                key = ?1   
+            "#,
+            key
+        )
+        .fetch_all(&self.pool)
+        .await;
+
+        if let Err(error) = result {
+            return Err(DatabaseErrors::RequestError(error.to_string()));
+        }
+
+        let mut customers: Vec<String> = result
+            .unwrap()
+            .iter()
+            .map(|record| record.name.to_string())
+            .collect();
+
+            let customer = match customers.pop() {
+                Some(customer) => customer,
+                None => return Ok(None),
+            };
+    
+            let mut transaction = match self.pool.begin().await {
+                Ok(transaction) => transaction,
+                Err(error) => return Err(DatabaseErrors::TransactionError(error.to_string())),
+            };
+    
+            let customer_id = self.hash_data.get_customer_id(&customer);
+            let result = sqlx::query!(
+                r#"
+                INSERT INTO 
+                    users_customers ( user_id, customer_id )
+                VALUES 
+                    ( ?1, ?2 )
+                "#,
+                user_id,
+                customer_id
+            )
+            .execute(&mut transaction)
+            .await;
+    
+            if let Err(error) = result {
+                return Err(DatabaseErrors::RequestError(error.to_string()));
+            }
+            if let Err(error) = transaction.commit().await {
+                return Err(DatabaseErrors::TransactionError(error.to_string()));
+            }
+    
+            self.hash_data.insert_user_for_customer(&customer, user_id);
+            Ok(Some(customer))
+        
+    }
+
+    pub async fn get_products_for_notification(
+        &self,
+        customer: &str,
+    ) -> Result<Vec<String>, DatabaseErrors> {
+        let customer_id = self.hash_data.get_customer_id(customer);
+        let result = sqlx::query!(
+            r#"
+            SELECT DISTINCT
+                products.name
+            FROM 
+                subscriptions
+                    INNER JOIN active_subscriptions 
+                    ON subscriptions.id = active_subscriptions.subscription_id 
+                    LEFT JOIN products
+                    ON subscriptions.product_id = products.id
+            WHERE
+                subscriptions.customer_id = ?1               
+            "#,
+            customer_id
+        )
+        .fetch_all(&self.pool)
+        .await;
+
+        if let Err(error) = result {
+            return Err(DatabaseErrors::RequestError(error.to_string()));
+        }
+
+        Ok(result
+            .unwrap()
+            .iter()
+            .map(|record| record.name.to_string())
+            .collect())
+    }
+    
+    pub async fn add_notification(
+        &mut self,
+        customer: &str,
+        product: &str,
+        text: String,
+    ) -> Result<(), DatabaseErrors> {
+        let mut transaction = match self.pool.begin().await {
+            Ok(transaction) => transaction,
+            Err(error) => return Err(DatabaseErrors::TransactionError(error.to_string())),
+        };
+        
+        let customer_id = self.hash_data.get_customer_id(customer);
+        let product_id = self.hash_data.get_product_id(customer, product);
+        let result = sqlx::query!(
+            r#"
+            INSERT INTO 
+                notifications ( customer_id, product_id, text )
+            VALUES 
+                ( ?1, ?2, ?3 )
+            "#,
+            customer_id,
+            product_id,
+            text
+        )
+        .execute(&mut transaction)
+        .await;
+
+        if let Err(error) = result {
+            return Err(DatabaseErrors::RequestError(error.to_string()));
+        }
+        let notification_id = result.unwrap().last_insert_rowid();
+
+        let result = sqlx::query!(
+            r#"
+            INSERT INTO 
+                active_notifications ( notification_id )
+            VALUES 
+                ( ?1 )
+            "#,
+            notification_id
         )
         .execute(&mut transaction)
         .await;
@@ -65,123 +242,26 @@ impl SqliteRepository {
 
         Ok(())
     }
-    pub async fn try_authorize(
-        &self,
-        user_id: u32,
-        key: String,
-    ) -> Result<Option<String>, DatabaseErrors> {
+    pub async fn get_notifications(&mut self, customer: &str, product: &str, notification: String) -> Result<Vec<Notification>, DatabaseErrors> {
+        let customer_id = self.hash_data.get_customer_id(customer);
+        let product_id = self.hash_data.get_product_id(customer, product);
         let result = sqlx::query!(
             r#"
-            SELECT 
-                id, name 
+            SELECT
+                subscriptions.id,
+                subscriptions.user_id as user_id,
+                customers.name as customer,
+                products.name as product
             FROM 
-                customers 
-            WHERE
-                key = ?1   
-            "#,
-            key
-        )
-        .fetch_all(&self.pool)
-        .await;
-
-        if let Err(error) = result {
-            return Err(DatabaseErrors::RequestError(error.to_string()));
-        }
-
-        let mut customers: Vec<Customer> = result
-            .unwrap()
-            .iter()
-            .map(|record| Customer {
-                id: record.id as u32,
-                name: record.name.to_string(),
-            })
-            .collect();
-
-        let customer = match customers.pop() {
-            Some(customer) => customer,
-            None => return Ok(None),
-        };
-
-        let mut transaction = match self.pool.begin().await {
-            Ok(transaction) => transaction,
-            Err(error) => return Err(DatabaseErrors::TransactionError(error.to_string())),
-        };
-
-        let result = sqlx::query!(
-            r#"
-            INSERT INTO 
-                users_customers ( user_id, customer_id )
-            VALUES 
-                ( ?1, ?2 )
-            "#,
-            user_id,
-            customer.id
-        )
-        .execute(&mut transaction)
-        .await;
-
-        if let Err(error) = result {
-            return Err(DatabaseErrors::RequestError(error.to_string()));
-        }
-        if let Err(error) = transaction.commit().await {
-            return Err(DatabaseErrors::TransactionError(error.to_string()));
-        }
-
-        Ok(Some(customer))
-    }
-    pub async fn get_subscriptions(
-        &self,
-        customer_id: u32,
-    ) -> Result<Vec<Product>, DatabaseErrors> {
-        let result = sqlx::query!(
-            r#"
-            SELECT 
-                products.id,
-                products.name
-            FROM 
-                products
-                    INNER JOIN subscriptions 
-                    ON subscriptions.product_id = products.id
-                        AND subscriptions.customer_id = ?1
-            "#,
-            customer_id
-        )
-        .fetch_all(&self.pool)
-        .await;
-
-        if let Err(error) = result {
-            return Err(DatabaseErrors::RequestError(error.to_string()));
-        }
-
-        Ok(result
-            .unwrap()
-            .iter()
-            .map(|record| Product {
-                id: record.id as u32,
-                name: record.name.to_string(),
-            })
-            .collect())
-    }
-    pub async fn add_notification(
-        &mut self,
-        customer_id: u32,
-        product_id: u32,
-        text: String,
-    ) -> Result<Vec<Notification>, DatabaseErrors> {
-        let result = sqlx::query!(
-            r#"
-            SELECT 
-                subscriptions.user_id,
-                products.id AS product_id,
-                products.name AS product_name,
-                customers.id AS customer_id,
-                customers.name AS customer_name
-            FROM 
-                subscriptions 
-                    INNER JOIN products ON subscriptions.product_id = products.id
-                    INNER JOIN customers ON subscriptions.customer_id = customers.id
-            WHERE
-                customer_id = ?1 AND product_id = ?2   
+                subscriptions
+                    INNER JOIN active_subscriptions 
+                    ON subscriptions.id = active_subscriptions.subscription_id 
+                    INNER JOIN customers
+                    ON customers.id = subscriptions.customer_id
+                        AND customers.id = ?1
+                    INNER JOIN products
+                    ON products.id = subscriptions.product_id
+                        AND products.id = ?2           
             "#,
             customer_id,
             product_id
@@ -193,67 +273,83 @@ impl SqliteRepository {
             return Err(DatabaseErrors::RequestError(error.to_string()));
         }
 
-        let notifications: Vec<Notification> = result
-            .unwrap()
+        let result = result.unwrap();
+        let notifications = result
             .iter()
-            .map(|record| Notification {
-                user_id: record.user_id as u32,
-                customer: Customer {
-                    id: record.customer_id as u32,
-                    name: record.customer_name.to_string(),
-                },
-                product: Product {
-                    id: record.product_id as u32,
-                    name: record.product_name.to_string(),
-                },
-                text: text.clone(),
-            })
+            .map(|record| Notification { user_id: record.user_id as u32, customer: record.customer.to_string(), product: record.product.to_string(), text: notification.clone()} )
             .collect();
 
-        let mut transaction = match self.pool.begin().await {
-            Ok(transaction) => transaction,
-            Err(error) => return Err(DatabaseErrors::TransactionError(error.to_string())),
-        };
+        let subscriptions_to_delete: Vec<u8> = result
+            .iter()
+            .map(|record| record.id as u8)
+            .collect();
 
-        let result = sqlx::query!(
-            r#"
-            DELETE 
-            FROM 
-                subscriptions 
-            WHERE 
-                customer_id = ?1 AND product_id = ?2 
-            "#,
-            customer_id,
-            product_id
-        )
-        .execute(&mut transaction)
-        .await;
+            let mut transaction = match self.pool.begin().await {
+                Ok(transaction) => transaction,
+                Err(error) => return Err(DatabaseErrors::TransactionError(error.to_string())),
+            };
 
-        if let Err(error) = result {
-            if let Err(error) = transaction.rollback().await {
+            let result = sqlx::query!(
+                r#"
+                DELETE FROM 
+                    active_subscriptions
+                WHERE 
+                    active_subscriptions.subscription_id IN ( ?1 )
+                "#,
+                subscriptions_to_delete
+            )
+            .execute(&mut transaction)
+            .await;
+    
+            if let Err(error) = result {
+                if let Err(error) = transaction.rollback().await {
+                    return Err(DatabaseErrors::TransactionError(error.to_string()));
+                }
+                return Err(DatabaseErrors::RequestError(error.to_string()));
+            }
+            if let Err(error) = transaction.commit().await {
                 return Err(DatabaseErrors::TransactionError(error.to_string()));
             }
-            return Err(DatabaseErrors::RequestError(error.to_string()));
-        }
-        if let Err(error) = transaction.commit().await {
-            return Err(DatabaseErrors::TransactionError(error.to_string()));
-        }
 
         Ok(notifications)
+    }
+
+    pub async fn get_customers_user_id(&mut self, customer: &str) -> Result<u32, DatabaseErrors> {
+        Ok(self.hash_data.get_user_for_customer(&customer).unwrap())
     }
 }
 
 struct HashData {
     customers: HashMap<String, u32>,
-    products: HashMap<u32, HashMap<String, u32>>,
+    products: HashMap<String, HashMap<String, u32>>,
+    users_customers: HashMap<String, u32>,
 }
 impl HashData {
     async fn new(pool: &SqlitePool) -> Self {
-        let customers = Self::get_customers(pool).await;
-        let products = Self::get_products(pool).await;
-        HashData { customers, products }    
+        let customers = Self::get_all_customers(pool).await;
+        let products = Self::get_all_products(pool).await;
+        let users_customers = Self::get_users_customers(pool).await;
+        HashData { customers, products, users_customers }    
     }
-    async fn get_customers(pool: &SqlitePool) -> HashMap<String, u32>{
+    fn get_customer_id(&self, customer: &str) -> Option<u32>  {
+        self.customers.get(customer).cloned()
+    }
+    fn get_product_id(&self, customer: &str, product: &str) -> Option<u32> {
+        self.products.get(customer).unwrap().get(product).cloned()
+    }
+    fn get_user_for_customer(&self, customer: &str) -> Option<u32> {
+        self.users_customers.get(customer).cloned()
+    }
+    fn insert_user_for_customer(&self, customer: &str, user_id: u32) {
+        self.users_customers.insert(customer.to_string(), user_id);
+    }
+    fn get_customers(&self) -> Vec<String> {
+        self.customers.keys().into_iter().map(|key| key.to_string()).collect()
+    }
+    fn get_customer_products(&self, customer: &str) -> Vec<String> {
+        self.products.get(customer).unwrap().keys().into_iter().map(|key| key.to_string()).collect()
+    }
+    async fn get_all_customers(pool: &SqlitePool) -> HashMap<String, u32>{
         let result = sqlx::query!(
             r#"
             SELECT 
@@ -271,17 +367,20 @@ impl HashData {
             .map(|record| (record.name.to_string(), record.id as u32))
             .collect()
     }
-    async fn get_products(pool: &SqlitePool) -> HashMap<u32, HashMap<String, u32>> {
+
+    async fn get_all_products(pool: &SqlitePool) -> HashMap<String, HashMap<String, u32>> {
         let result = sqlx::query!(
             r#"
             SELECT 
-                customers_products.customer_id,
+                customers.name as customer,
                 products.id,
                 products.name 
             FROM 
                 products 
                 INNER JOIN customers_products 
                 ON products.id = customers_products.product_id
+                INNER JOIN customers
+                ON customers_products.customer_id = customers.id
             "#
         )
         .fetch_all(pool)
@@ -291,8 +390,31 @@ impl HashData {
             .unwrap()
             .iter()
             .map(|record|
-                (record.customer_id as u32, (record.name.to_string(), record.id as u32))
+                (record.customer, (record.name.to_string(), record.id as u32))
             )
+            .collect();
+            todo!()
+    }
+
+    async fn get_users_customers(pool: &SqlitePool) -> HashMap<String, u32>{
+        let result = sqlx::query!(
+            r#"
+            SELECT 
+                customers.name,
+                users_customers.user_id 
+            FROM 
+                users_customers
+                LEFT JOIN customers
+                ON users_customers.customer_id = customers.id
+            "#
+        )
+        .fetch_all(pool)
+        .await;
+
+        result
+            .unwrap()
+            .iter()
+            .map(|record| (record.name.to_string(), record.user_id as u32))
             .collect()
     }
 }

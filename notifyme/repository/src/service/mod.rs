@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use domain::{requests::{ClientRequestToRepository, CustomerRequestToRepository, RequestToRepository}, responses::{ClientResponseFromRepository, CustomerResponseFromRepository}};
+use domain::{requests::{ClientRequestToRepository, CustomerRequestToRepository, RequestToRepository}, responses::{ClientResponseFromRepository, CustomerResponseFromRepository, ResponseFromRepository}};
 use message_queue::Publisher;
 use serde::Deserialize;
 use tokio::sync::Mutex;
@@ -42,7 +42,7 @@ impl RepositoryService {
                 user_id,
                 customer,
             } => {
-                let products = self.repository.get_products(customer).await.unwrap();
+                let products = self.repository.get_products(&customer).await.unwrap();
                 ClientResponseFromRepository::Products { user_id, products }
             }
             ClientRequestToRepository::NewSubscription {
@@ -52,7 +52,7 @@ impl RepositoryService {
             } => {
                 let success = self
                     .repository
-                    .add_subscription(user_id, customer, product)
+                    .add_subscription(user_id, &customer, &product)
                     .await
                     .is_ok();
                 ClientResponseFromRepository::NewSubscription { user_id, success }
@@ -77,7 +77,7 @@ impl RepositoryService {
             CustomerRequestToRepository::ProductsForNotification { user_id, customer } => {
                 let products = self
                     .repository
-                    .get_subscriptions(customer)
+                    .get_products_for_notification(&customer)
                     .await
                     .unwrap();
                     CustomerResponseFromRepository::ProductsForNotification { user_id, customer, products }
@@ -90,9 +90,8 @@ impl RepositoryService {
             } => {
                 let success = self
                     .repository
-                    .add_notification(customer, product, notification)
+                    .add_notification(&customer, &product, notification)
                     .await
-                    .unwrap()
                     .is_ok();
                 CustomerResponseFromRepository::NewNotification {
                     user_id,
@@ -101,6 +100,7 @@ impl RepositoryService {
                 }
             }
         };
+
         let mut publisher = self.publisher.lock().await;
         publisher
             .publish_message(
@@ -113,9 +113,16 @@ impl RepositoryService {
     }
     pub async fn handle_request_to_repository(&mut self, request: RequestToRepository) {
         let response = match request {
-            RequestToRepository::NotificationForClients { user_id, customer, product, notification } => todo!(),
-            RequestToRepository::SubscriptionForCustomer { user_id, customer, product } => todo!(),
-        }
+            RequestToRepository::NotificationForClients { customer, product, notification, .. } => {
+                let notifications = self.repository.get_notifications(&customer, &product, notification).await.unwrap();
+                ResponseFromRepository::Notifications(notifications)
+            },
+            RequestToRepository::SubscriptionForCustomer { customer, product, .. } => {
+                let user_id = self.repository.get_customers_user_id(&customer).await.unwrap();
+                ResponseFromRepository::Subscription { user_id, customer, product }   
+            },
+        };
+
         let mut publisher = self.publisher.lock().await;
         publisher
             .publish_message(
