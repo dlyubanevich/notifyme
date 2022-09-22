@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use domain::{requests::RepositoryRequest, responses::RepositoryResponse};
+use domain::{requests::{ClientRequestToRepository, CustomerRequestToRepository, RequestToRepository}, responses::{ClientResponseFromRepository, CustomerResponseFromRepository}};
 use message_queue::Publisher;
 use serde::Deserialize;
 use tokio::sync::Mutex;
@@ -16,10 +16,14 @@ pub struct RepositoryService {
 impl RepositoryService {
     pub fn new(repository: SqliteRepository, publisher: Arc<Mutex<Publisher>>) -> Self {
         let exchange = std::env::var("EXCHANGE").unwrap();
+        let client_response_queue = std::env::var("CLIENT_REPOSITORY_RESPONSE_QUEUE").unwrap();
+        let customer_response_queue = std::env::var("CUSTOMER_REPOSITORY_RESPONSE_QUEUE").unwrap();
         let response_queue = std::env::var("REPOSITORY_RESPONSE_QUEUE").unwrap();
         let config = Config {
             exchange,
-            response_queue,
+            client_response_queue,
+            customer_response_queue,
+            response_queue
         };
 
         Self {
@@ -28,61 +32,30 @@ impl RepositoryService {
             publisher,
         }
     }
-    pub async fn handle_request(&mut self, request: RepositoryRequest) {
+    pub async fn handle_client_request_to_repository(&mut self, request: ClientRequestToRepository) {
         let response = match request {
-            RepositoryRequest::Customers { user_id } => {
+            ClientRequestToRepository::Customers { user_id } => {
                 let customers = self.repository.get_customers().await.unwrap();
-                RepositoryResponse::Customers { user_id, customers }
+                ClientResponseFromRepository::Customers { user_id, customers }
             }
-            RepositoryRequest::Products {
+            ClientRequestToRepository::Products {
                 user_id,
-                customer_id,
+                customer,
             } => {
-                let products = self.repository.get_products(customer_id).await.unwrap();
-                RepositoryResponse::Products { user_id, products }
+                let products = self.repository.get_products(customer).await.unwrap();
+                ClientResponseFromRepository::Products { user_id, products }
             }
-            RepositoryRequest::NewSubscription {
+            ClientRequestToRepository::NewSubscription {
                 user_id,
-                customer_id,
-                product_id,
+                customer,
+                product
             } => {
                 let success = self
                     .repository
-                    .add_subscription(user_id, customer_id, product_id)
+                    .add_subscription(user_id, customer, product)
                     .await
                     .is_ok();
-                RepositoryResponse::NewSubscription { user_id, success }
-            }
-            RepositoryRequest::CustomerAuthorization { user_id, key } => {
-                let customer = self.repository.try_authorize(user_id, key).await.unwrap();
-                RepositoryResponse::CustomerAuthorization { user_id, customer }
-            }
-            RepositoryRequest::Subscriptions {
-                user_id,
-                customer_id,
-            } => {
-                let products = self
-                    .repository
-                    .get_subscriptions(customer_id)
-                    .await
-                    .unwrap();
-                RepositoryResponse::Subscriptions { user_id, products }
-            }
-            RepositoryRequest::NewNotification {
-                user_id,
-                customer_id,
-                product_id,
-                notification,
-            } => {
-                let notifications = self
-                    .repository
-                    .add_notification(customer_id, product_id, notification)
-                    .await
-                    .unwrap();
-                RepositoryResponse::NewNotification {
-                    user_id,
-                    notifications,
-                }
+                ClientResponseFromRepository::NewSubscription { user_id, success }
             }
         };
 
@@ -90,8 +63,65 @@ impl RepositoryService {
         publisher
             .publish_message(
                 &self.config.exchange,
+                &self.config.client_response_queue,
+                response.to_string(),
+            )
+            .await;
+    }
+    pub async fn handle_customer_request_to_repository(&mut self, request: CustomerRequestToRepository) {
+        let response = match request {
+            CustomerRequestToRepository::Authorization { user_id, key } => {
+                let customer = self.repository.try_authorize(user_id, key).await.unwrap();
+                CustomerResponseFromRepository::Authorization { user_id, customer }
+            }
+            CustomerRequestToRepository::ProductsForNotification { user_id, customer } => {
+                let products = self
+                    .repository
+                    .get_subscriptions(customer)
+                    .await
+                    .unwrap();
+                    CustomerResponseFromRepository::ProductsForNotification { user_id, customer, products }
+            }
+            CustomerRequestToRepository::NewNotification {
+                user_id,
+                customer,
+                product,
+                notification,
+            } => {
+                let success = self
+                    .repository
+                    .add_notification(customer, product, notification)
+                    .await
+                    .unwrap()
+                    .is_ok();
+                CustomerResponseFromRepository::NewNotification {
+                    user_id,
+                    customer,
+                    success,
+                }
+            }
+        };
+        let mut publisher = self.publisher.lock().await;
+        publisher
+            .publish_message(
+                &self.config.exchange,
+                &self.config.customer_response_queue,
+                response.to_string(),
+            )
+            .await;
+
+    }
+    pub async fn handle_request_to_repository(&mut self, request: RequestToRepository) {
+        let response = match request {
+            RequestToRepository::NotificationForClients { user_id, customer, product, notification } => todo!(),
+            RequestToRepository::SubscriptionForCustomer { user_id, customer, product } => todo!(),
+        }
+        let mut publisher = self.publisher.lock().await;
+        publisher
+            .publish_message(
+                &self.config.exchange,
                 &self.config.response_queue,
-                serde_json::to_string(&response).unwrap().clone(),
+                response.to_string(),
             )
             .await;
     }
@@ -100,5 +130,7 @@ impl RepositoryService {
 #[derive(Deserialize, Debug)]
 struct Config {
     exchange: String,
+    client_response_queue: String,
+    customer_response_queue: String,
     response_queue: String,
 }

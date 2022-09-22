@@ -1,4 +1,4 @@
-use domain::responses::Response;
+use domain::responses::ClientResponse;
 use teloxide::{
     payloads::SendMessageSetters,
     prelude::AutoSend,
@@ -18,9 +18,9 @@ impl Service {
     pub fn new(bot: AutoSend<Bot>) -> Self {
         Service { bot }
     }
-    pub async fn handle_response(&mut self, response: Response) {
+    pub async fn handle_response(&mut self, response: ClientResponse) {
         match response {
-            Response::Customers { user_id, customers } => {
+            ClientResponse::Customers { user_id, customers } => {
                 let mut keyboard: Vec<Vec<KeyboardButton>> = vec![];
                 for customers in customers.chunks(3) {
                     let row = customers
@@ -34,7 +34,7 @@ impl Service {
                     .reply_markup(KeyboardMarkup::new(keyboard))
                     .await;
             }
-            Response::Products { user_id, products } => {
+            ClientResponse::Products { user_id, products } => {
                 let mut keyboard: Vec<Vec<KeyboardButton>> = vec![];
                 for products in products.chunks(3) {
                     let row = products
@@ -48,13 +48,13 @@ impl Service {
                     .reply_markup(KeyboardMarkup::new(keyboard))
                     .await;
             }
-            Response::SubscriptionSuccess { user_id } => {
+            ClientResponse::SubscriptionSuccess { user_id } => {
                 self.bot
                     .send_message(ChatId(user_id as i64), "Подписка успешно оформлена!")
                     .reply_markup(KeyboardRemove::new())
                     .await;
             }
-            Response::SubscriptionFailure { user_id } => {
+            ClientResponse::SubscriptionFailure { user_id } => {
                 self.bot
                     .send_message(
                         ChatId(user_id as i64),

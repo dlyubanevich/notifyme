@@ -1,9 +1,49 @@
 use serde::{Deserialize, Serialize};
 
-use crate::models::{Customer, Product};
+use crate::models::UserId;
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum Request {
+pub enum ClientRequest {
+    Customers {
+        user_id: UserId,
+        timestamp: i64,
+    },
+    Products {
+        user_id: UserId,
+        customer: String,
+        timestamp: i64,
+    },
+    NewSubscription {
+        user_id: UserId,
+        customer: String,
+        product: String,
+        timestamp: i64,
+    },
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum CustomerRequest {
+    Authorization {
+        user_id: UserId,
+        key: String,
+        timestamp: i64,
+    },
+    ProductsForNotification {
+        user_id: UserId,
+        customer: String,
+        timestamp: i64,
+    },
+    NewNotification {
+        user_id: UserId,
+        customer: String,
+        product: String,
+        notification: String,
+        timestamp: i64,
+    },
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum ClientRequestToRepository {
     Customers {
         user_id: u32,
     },
@@ -16,59 +56,66 @@ pub enum Request {
         customer: String,
         product: String,
     },
-    CustomerAuthorization {
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum CustomerRequestToRepository {
+    Authorization {
         user_id: u32,
         key: String,
     },
-    Subscriptions {
+    ProductsForNotification {
         user_id: u32,
-        customer: Customer,
+        customer: String,
     },
     NewNotification {
         user_id: u32,
-        customer: Customer,
-        product: Product,
+        customer: String,
+        product: String,
         notification: String,
     },
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum RepositoryRequest {
-    Customers {
+pub enum RequestToRepository {
+    NotificationForClients {
         user_id: u32,
-    },
-    Products {
-        user_id: u32,
-        customer_id: u32,
-    },
-    NewSubscription {
-        user_id: u32,
-        customer_id: u32,
-        product_id: u32,
-    },
-    CustomerAuthorization {
-        user_id: u32,
-        key: String,
-    },
-    Subscriptions {
-        user_id: u32,
-        customer_id: u32,
-    },
-    NewNotification {
-        user_id: u32,
-        customer_id: u32,
-        product_id: u32,
+        customer: String,
+        product: String,
         notification: String,
     },
-}
+    SubscriptionForCustomer {
+        user_id: u32,
+        customer: String,
+        product: String,
+    }
+}    
 
-impl ToString for Request {
+impl ToString for ClientRequest {
     fn to_string(&self) -> String {
         serde_json::to_string(&self).unwrap()
     }
 }
 
-impl ToString for RepositoryRequest {
+impl ToString for CustomerRequest {
+    fn to_string(&self) -> String {
+        serde_json::to_string(&self).unwrap()
+    }
+}
+
+impl ToString for ClientRequestToRepository {
+    fn to_string(&self) -> String {
+        serde_json::to_string(&self).unwrap()
+    }
+}
+
+impl ToString for CustomerRequestToRepository {
+    fn to_string(&self) -> String {
+        serde_json::to_string(&self).unwrap()
+    }
+}
+
+impl ToString for RequestToRepository {
     fn to_string(&self) -> String {
         serde_json::to_string(&self).unwrap()
     }

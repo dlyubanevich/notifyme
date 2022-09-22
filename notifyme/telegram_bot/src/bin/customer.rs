@@ -1,7 +1,7 @@
 use std::{sync::Arc, collections:: HashMap};
 
 use domain::{
-    requests::Request, models::Customer,
+    requests::ClientRequest, models::Customer,
 };
 use dotenv::dotenv;
 use message_queue::{Client, Publisher};
@@ -96,7 +96,7 @@ async fn message_handler(
         State::Authorization => authorization(msg, params).await?,
         State::Command => choose_command(bot, msg).await?,
         State::Subscriptions => show_subscriptions(msg, params).await?,
-        _ => todo!()
+        State::Notification => add_notification(msg, params).await?,
     }
 
     Ok(())
@@ -125,7 +125,7 @@ async fn authorization(
 ) -> HandlerResult {
     log::info!("Authorization for user [{}]", msg.chat.id.0);
     let key = msg.text().unwrap().to_owned();
-    let message = Request::CustomerAuthorization { user_id: msg.chat.id.0 as u32, key }.to_string();
+    let message = ClientRequest::CustomerAuthorization { user_id: msg.chat.id.0 as u32, key }.to_string();
     params
         .publisher
         .lock()
@@ -174,7 +174,7 @@ async fn show_subscriptions(
     log::info!("show subscriptions for user [{}]", msg.chat.id.0);
     let user_id = msg.chat.id.0 as u32;
     let customer = params.authorized_customers.lock().await.get(&msg.chat.id).unwrap().to_owned();
-    let message = Request::Subscriptions { user_id, customer }.to_string();
+    let message = ClientRequest::Subscriptions { user_id, customer }.to_string();
     params
         .publisher
         .lock()
@@ -184,6 +184,25 @@ async fn show_subscriptions(
     
     Ok(())
 }
+
+async fn add_notification(
+    msg: Message,
+    params: ConfigParams,
+) -> HandlerResult {
+    log::info!("add notification for user [{}]", msg.chat.id.0);
+    let user_id = msg.chat.id.0 as u32;
+    let customer = params.authorized_customers.lock().await.get(&msg.chat.id).unwrap().to_owned();
+    let message = ClientRequest::Subscriptions { user_id, customer }.to_string();
+    params
+        .publisher
+        .lock()
+        .await
+        .publish_message("notifyme", "request.customer", message)
+        .await;
+    
+    Ok(())
+}
+
 async fn callback_handler(q: CallbackQuery, bot: AutoSend<Bot>, storage: Arc<StateStorage<State>>,) -> HandlerResult {
     if let Some(data) = q.data {
         log::info!("Callback [{}]", data);

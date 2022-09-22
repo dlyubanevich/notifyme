@@ -1,9 +1,59 @@
 use serde::{Deserialize, Serialize};
 
-use crate::models::{Customer, Notification, Product};
+use crate::models::{Notification, UserId};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum Response {
+pub enum ClientResponse {
+    Customers {
+        user_id: UserId,
+        customers: Vec<String>,
+    },
+    Products {
+        user_id: UserId,
+        products: Vec<String>,
+    },
+    SubscriptionSuccess {
+        user_id: UserId,
+    },
+    SubscriptionFailure {
+        user_id: UserId,
+    },
+    CustomerNotification {
+        user_id: UserId,
+        customer: String, 
+        product: String, 
+        notification: String,   
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum CustomerResponse {
+    AuthorizationSuccess {
+        user_id: UserId,
+        customer: String,
+    },
+    AuthorizationFailure {
+        user_id: UserId,
+    },
+    ProductsForNotification {
+        user_id: UserId,
+        products: Vec<String>,
+    },
+    NotificationSuccess {
+        user_id: UserId,
+    },
+    NotificationFailure {
+        user_id: UserId,
+    },
+    ClientSubscription{
+        user_id: UserId,
+        customer: String, 
+        product: String,
+    },
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum ClientResponseFromRepository {
     Customers {
         user_id: u32,
         customers: Vec<String>,
@@ -12,64 +62,65 @@ pub enum Response {
         user_id: u32,
         products: Vec<String>,
     },
-    SubscriptionSuccess {
-        user_id: u32,
-    },
-    SubscriptionFailure {
-        user_id: u32,
-    },
-    CustomerAuthorizationSuccess {
-        user_id: u32,
-        customer: Customer,
-    },
-    CustomerAuthorizationFailure {
-        user_id: u32,
-    },
-    Subscriptions {
-        user_id: u32,
-        products: Vec<String>,
-    },
-    NewNotification {
-        user_id: u32,
-        notifications: Vec<Notification>,
-    },
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone)]
-pub enum RepositoryResponse {
-    Customers {
-        user_id: u32,
-        customers: Vec<Customer>,
-    },
-    Products {
-        user_id: u32,
-        products: Vec<Product>,
-    },
     NewSubscription {
         user_id: u32,
         success: bool,
     },
-    CustomerAuthorization {
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum CustomerResponseFromRepository {
+    Authorization {
         user_id: u32,
-        customer: Option<Customer>,
+        customer: Option<String>,
     },
-    Subscriptions {
+    ProductsForNotification {
         user_id: u32,
-        products: Vec<Product>,
+        customer: String,
+        products: Vec<String>,
     },
     NewNotification {
         user_id: u32,
-        notifications: Vec<Notification>,
+        customer: String,
+        success: bool,
     },
 }
 
-impl ToString for Response {
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub enum ResponseFromRepository {
+    Notifications(Vec<Notification>),
+    Subscription {
+        user_id: u32,
+        customer: String,
+        product: String,
+    },
+}
+
+impl ToString for ClientResponse {
     fn to_string(&self) -> String {
         serde_json::to_string(&self).unwrap()
     }
 }
 
-impl ToString for RepositoryResponse {
+impl ToString for CustomerResponse {
+    fn to_string(&self) -> String {
+        serde_json::to_string(&self).unwrap()
+    }
+}
+
+impl ToString for ClientResponseFromRepository {
+    fn to_string(&self) -> String {
+        serde_json::to_string(&self).unwrap()
+    }
+}
+
+impl ToString for CustomerResponseFromRepository {
+    fn to_string(&self) -> String {
+        serde_json::to_string(&self).unwrap()
+    }
+}
+
+impl ToString for ResponseFromRepository {
     fn to_string(&self) -> String {
         serde_json::to_string(&self).unwrap()
     }

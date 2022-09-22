@@ -19,7 +19,6 @@ impl SqliteRepository {
             Err(error) => return Err(DatabaseErrors::ConnectionError(error.to_string())),
         };
 
-        println!("{:?}", record);
         let result = sqlx::query!(
             r#"
             INSERT INTO users ( timestamp, user_id, data, event )
@@ -50,12 +49,12 @@ impl SqliteRepository {
         println!("{:?}", record);
         let result = sqlx::query!(
             r#"
-            INSERT INTO customers ( timestamp, user_id, customer_id, data, event )
+            INSERT INTO customers ( timestamp, user_id, customer, data, event )
             VALUES ( ?1, ?2, ?3, ?4, ?5 )
             "#,
             record.timestamp,
             record.user_id,
-            record.customer_id,
+            record.customer,
             record.data,
             record.event
         )

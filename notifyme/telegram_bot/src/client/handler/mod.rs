@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use domain::responses::Response;
+use domain::responses::ClientResponse;
 use lapin::{message::DeliveryResult, options::BasicAckOptions, ConsumerDelegate};
 use tokio::sync::Mutex;
 
@@ -15,7 +15,7 @@ impl MessageHandler {
         MessageHandler { service }
     }
     pub async fn handle_response(&mut self, message: String) {
-        let response: Response = serde_json::from_str(&message).unwrap();
+        let response: ClientResponse = serde_json::from_str(&message).unwrap();
         self.service.handle_response(response).await;
     }
 }

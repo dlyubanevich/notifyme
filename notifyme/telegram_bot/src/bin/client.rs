@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use domain::{
-    requests::Request,
+    requests::ClientRequest,
 };
 use dotenv::dotenv;
 use message_queue::{Client, Publisher};
@@ -103,10 +103,11 @@ async fn choose_customer(
     params: ConfigParams,
 ) -> HandlerResult {
     log::info!("Choose customer for user [{}]", msg.chat.id.0);
-    let message = Request::Customers {
+    let message = ClientRequest::Customers {
         user_id: msg.chat.id.0 as u32,
     }
     .to_string();
+    
     params
         .publisher
         .lock()
@@ -124,7 +125,7 @@ async fn choose_product(
 ) -> HandlerResult {
     log::info!("choose product for user [{}]", msg.chat.id.0);
     let customer = String::from(msg.text().unwrap());
-    let message = Request::Products {
+    let message = ClientRequest::Products {
         user_id: msg.chat.id.0 as u32,
         customer: customer.clone(),
     }
@@ -149,7 +150,7 @@ async fn add_subscription(
 ) -> HandlerResult {
     log::info!("add subscription for user [{}]", msg.chat.id.0);
     let product = String::from(msg.text().unwrap());
-    let message = Request::NewSubscription {
+    let message = ClientRequest::NewSubscription {
         user_id: msg.chat.id.0 as u32,
         customer,
         product,

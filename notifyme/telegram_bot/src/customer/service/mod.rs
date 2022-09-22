@@ -1,6 +1,6 @@
 use std::{sync::Arc, collections::HashMap};
 
-use domain::{responses::Response, models::Customer};
+use domain::{responses::ClientResponse, models::Customer};
 use teloxide::{
     prelude::AutoSend,
     requests::Requester,
@@ -23,9 +23,9 @@ impl Service {
     pub fn new(bot: AutoSend<Bot>, state_storage: Arc<StateStorage<State>>, authorized_customers: Arc<Mutex<HashMap<ChatId, Customer>>>) -> Self {
         Service { bot, state_storage, authorized_customers }
     }
-    pub async fn handle_response(&mut self, response: Response) -> HandlerResult {
+    pub async fn handle_response(&mut self, response: ClientResponse) -> HandlerResult {
         match response {
-            Response::CustomerAuthorizationFailure { user_id } => {
+            ClientResponse::CustomerAuthorizationFailure { user_id } => {
                 self.bot
                     .send_message(
                         ChatId(user_id as i64),
@@ -34,7 +34,7 @@ impl Service {
                     .await?;
                     Ok(())
             },
-            Response::CustomerAuthorizationSuccess { user_id, customer } => {
+            ClientResponse::CustomerAuthorizationSuccess { user_id, customer } => {
                 let chat_id = ChatId(user_id as i64);
                 let customer_name = customer.name.to_string();
                 self.authorized_customers.lock().await.insert(chat_id, customer);
@@ -48,7 +48,7 @@ impl Service {
                     .await?;
                 Ok(())
             },
-            Response::Subscriptions { user_id, products } => {
+            ClientResponse::Subscriptions { user_id, products } => {
                 let chat_id = ChatId(user_id as i64);
                 let text = match products.len() {
                     0 => "Нет подписок на товары!".to_string(),

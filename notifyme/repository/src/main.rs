@@ -8,6 +8,8 @@ use tokio::sync::Mutex;
 async fn main() {
     dotenv().ok();
 
+    let client_request_queue = std::env::var("CLIENT_REPOSITORY_REQUEST_QUEUE").unwrap();
+    let customer_request_queue = std::env::var("CUSTOMER_REPOSITORY_REQUEST_QUEUE").unwrap();
     let request_queue = std::env::var("REPOSITORY_REQUEST_QUEUE").unwrap();
     let mut client = Client::new("amqp://localhost:5672").await;
 
@@ -19,6 +21,12 @@ async fn main() {
     client
         .with_consumer(&request_queue, request_delegate(message_handler.clone()))
         .await;
+    client
+        .with_consumer(&request_queue, request_delegate(message_handler.clone()))
+        .await;
+    client
+        .with_consumer(&request_queue, request_delegate(message_handler.clone()))
+        .await;        
 
     client.run();
 }

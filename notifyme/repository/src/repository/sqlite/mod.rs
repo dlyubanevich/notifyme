@@ -1,84 +1,44 @@
-use domain::models::{Customer, Notification, Product};
+use std::collections::HashMap;
+
+use domain::models::Notification;
 use sqlx::SqlitePool;
 
 use crate::repository::common::errors::DatabaseErrors;
 
 pub struct SqliteRepository {
     pool: SqlitePool,
+    hash_data: HashData,
 }
 
 impl SqliteRepository {
     pub async fn new(url: &str) -> Result<Self, DatabaseErrors> {
         match SqlitePool::connect(url).await {
-            Ok(pool) => Ok(SqliteRepository { pool }),
+            Ok(pool) => {
+                let hash_data = HashData::new(&pool).await;
+                Ok(SqliteRepository { pool, hash_data })
+            },
             Err(error) => Err(DatabaseErrors::ConnectionError(error.to_string())),
         }
     }
-    pub async fn get_customers(&self) -> Result<Vec<Customer>, DatabaseErrors> {
-        let result = sqlx::query!(
-            r#"
-            SELECT 
-                id, name 
-            FROM 
-                customers 
-            "#
-        )
-        .fetch_all(&self.pool)
-        .await;
-
-        if let Err(error) = result {
-            return Err(DatabaseErrors::RequestError(error.to_string()));
-        }
-
-        Ok(result
-            .unwrap()
-            .iter()
-            .map(|record| Customer {
-                id: record.id as u32,
-                name: record.name.to_string(),
-            })
-            .collect())
+    pub async fn get_customers(&self) -> Result<Vec<String>, DatabaseErrors> {
+        Ok(self.hash_data.get_customers())
     }
-    pub async fn get_products(&self, customer_id: u32) -> Result<Vec<Product>, DatabaseErrors> {
-        let result = sqlx::query!(
-            r#"
-            SELECT 
-                id, name 
-            FROM 
-                products 
-                INNER JOIN customers_products 
-                ON products.id = customers_products.product_id
-                    AND customers_products.customer_id = ?1
-            "#,
-            customer_id
-        )
-        .fetch_all(&self.pool)
-        .await;
-
-        if let Err(error) = result {
-            return Err(DatabaseErrors::RequestError(error.to_string()));
-        }
-
-        Ok(result
-            .unwrap()
-            .iter()
-            .map(|record| Product {
-                id: record.id as u32,
-                name: record.name.to_string(),
-            })
-            .collect())
+    pub async fn get_products(&self, customer: String) -> Result<Vec<String>, DatabaseErrors> {
+        Ok(self.hash_data.get_customer_products(&customer))
     }
     pub async fn add_subscription(
         &mut self,
         user_id: u32,
-        customer_id: u32,
-        product_id: u32,
+        customer: String,
+        product: String,
     ) -> Result<(), DatabaseErrors> {
         let mut transaction = match self.pool.begin().await {
             Ok(transaction) => transaction,
             Err(error) => return Err(DatabaseErrors::TransactionError(error.to_string())),
         };
 
+        let customer_id = self.hash_data.get_customer_id(&customer);
+        let product_id = self.hash_data.get_product_id(&product);
         let result = sqlx::query!(
             r#"
             INSERT INTO 
@@ -109,7 +69,7 @@ impl SqliteRepository {
         &self,
         user_id: u32,
         key: String,
-    ) -> Result<Option<Customer>, DatabaseErrors> {
+    ) -> Result<Option<String>, DatabaseErrors> {
         let result = sqlx::query!(
             r#"
             SELECT 
@@ -280,5 +240,59 @@ impl SqliteRepository {
         }
 
         Ok(notifications)
+    }
+}
+
+struct HashData {
+    customers: HashMap<String, u32>,
+    products: HashMap<u32, HashMap<String, u32>>,
+}
+impl HashData {
+    async fn new(pool: &SqlitePool) -> Self {
+        let customers = Self::get_customers(pool).await;
+        let products = Self::get_products(pool).await;
+        HashData { customers, products }    
+    }
+    async fn get_customers(pool: &SqlitePool) -> HashMap<String, u32>{
+        let result = sqlx::query!(
+            r#"
+            SELECT 
+                id, name 
+            FROM 
+                customers 
+            "#
+        )
+        .fetch_all(pool)
+        .await;
+
+        result
+            .unwrap()
+            .iter()
+            .map(|record| (record.name.to_string(), record.id as u32))
+            .collect()
+    }
+    async fn get_products(pool: &SqlitePool) -> HashMap<u32, HashMap<String, u32>> {
+        let result = sqlx::query!(
+            r#"
+            SELECT 
+                customers_products.customer_id,
+                products.id,
+                products.name 
+            FROM 
+                products 
+                INNER JOIN customers_products 
+                ON products.id = customers_products.product_id
+            "#
+        )
+        .fetch_all(pool)
+        .await;
+
+        result
+            .unwrap()
+            .iter()
+            .map(|record|
+                (record.customer_id as u32, (record.name.to_string(), record.id as u32))
+            )
+            .collect()
     }
 }
