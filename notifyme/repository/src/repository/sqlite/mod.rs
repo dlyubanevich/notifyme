@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use domain::models::Notification;
+use domain::models::{Notification, Customer, Product};
 use sqlx::SqlitePool;
 
 use crate::repository::common::errors::DatabaseErrors;
@@ -17,15 +17,15 @@ impl SqliteRepository {
                 let hash_data = HashData::new(&pool).await;
                 Ok(SqliteRepository { pool, hash_data })
             },
-            Err(error) => Err(DatabaseErrors::ConnectionError(error.to_string())),
+            Err(error) => Err(DatabaseErrors::ConnectionProblem(error.to_string())),
         }
     }
 
-    pub async fn get_customers(&self) -> Result<Vec<String>, DatabaseErrors> {
+    pub async fn get_customers(&self) -> Result<Vec<Customer>, DatabaseErrors> {
         Ok(self.hash_data.get_customers())
     }
 
-    pub async fn get_products(&self, customer: &str) -> Result<Vec<String>, DatabaseErrors> {
+    pub async fn get_products(&self, customer: &str) -> Result<Vec<Product>, DatabaseErrors> {
         Ok(self.hash_data.get_customer_products(customer))
     }
 
@@ -88,10 +88,10 @@ impl SqliteRepository {
     }
 
     pub async fn try_authorize(
-        &self,
+        &mut self,
         user_id: u32,
         key: String,
-    ) -> Result<Option<String>, DatabaseErrors> {
+    ) -> Result<Option<Customer>, DatabaseErrors> {
         let result = sqlx::query!(
             r#"
             SELECT 
@@ -148,14 +148,14 @@ impl SqliteRepository {
             }
     
             self.hash_data.insert_user_for_customer(&customer, user_id);
-            Ok(Some(customer))
+            Ok(Some(Customer { name: customer }))
         
     }
 
     pub async fn get_products_for_notification(
         &self,
         customer: &str,
-    ) -> Result<Vec<String>, DatabaseErrors> {
+    ) -> Result<Vec<Product>, DatabaseErrors> {
         let customer_id = self.hash_data.get_customer_id(customer);
         let result = sqlx::query!(
             r#"
@@ -182,7 +182,7 @@ impl SqliteRepository {
         Ok(result
             .unwrap()
             .iter()
-            .map(|record| record.name.to_string())
+            .map(|record| Product { name: record.name.to_string() } )
             .collect())
     }
     
@@ -209,23 +209,6 @@ impl SqliteRepository {
             customer_id,
             product_id,
             text
-        )
-        .execute(&mut transaction)
-        .await;
-
-        if let Err(error) = result {
-            return Err(DatabaseErrors::RequestError(error.to_string()));
-        }
-        let notification_id = result.unwrap().last_insert_rowid();
-
-        let result = sqlx::query!(
-            r#"
-            INSERT INTO 
-                active_notifications ( notification_id )
-            VALUES 
-                ( ?1 )
-            "#,
-            notification_id
         )
         .execute(&mut transaction)
         .await;
@@ -279,10 +262,11 @@ impl SqliteRepository {
             .map(|record| Notification { user_id: record.user_id as u32, customer: record.customer.to_string(), product: record.product.to_string(), text: notification.clone()} )
             .collect();
 
-        let subscriptions_to_delete: Vec<u8> = result
+        let subscriptions_to_delete: Vec<String> = result
             .iter()
-            .map(|record| record.id as u8)
+            .map(|record| record.id.to_string())
             .collect();
+        let subscriptions_to_delete = subscriptions_to_delete.join(",");
 
             let mut transaction = match self.pool.begin().await {
                 Ok(transaction) => transaction,
@@ -315,7 +299,7 @@ impl SqliteRepository {
     }
 
     pub async fn get_customers_user_id(&mut self, customer: &str) -> Result<u32, DatabaseErrors> {
-        Ok(self.hash_data.get_user_for_customer(&customer).unwrap())
+        Ok(self.hash_data.get_user_for_customer(customer).unwrap())
     }
 }
 
@@ -340,14 +324,14 @@ impl HashData {
     fn get_user_for_customer(&self, customer: &str) -> Option<u32> {
         self.users_customers.get(customer).cloned()
     }
-    fn insert_user_for_customer(&self, customer: &str, user_id: u32) {
+    fn insert_user_for_customer(&mut self, customer: &str, user_id: u32) {
         self.users_customers.insert(customer.to_string(), user_id);
     }
-    fn get_customers(&self) -> Vec<String> {
-        self.customers.keys().into_iter().map(|key| key.to_string()).collect()
+    fn get_customers(&self) -> Vec<Customer> {
+        self.customers.keys().into_iter().map(|key| Customer { name: key.to_string() } ).collect()
     }
-    fn get_customer_products(&self, customer: &str) -> Vec<String> {
-        self.products.get(customer).unwrap().keys().into_iter().map(|key| key.to_string()).collect()
+    fn get_customer_products(&self, customer: &str) -> Vec<Product> {
+        self.products.get(customer).unwrap().keys().into_iter().map(|key| Product { name: key.to_string() } ).collect()
     }
     async fn get_all_customers(pool: &SqlitePool) -> HashMap<String, u32>{
         let result = sqlx::query!(
@@ -377,23 +361,29 @@ impl HashData {
                 products.name 
             FROM 
                 products 
-                INNER JOIN customers_products 
-                ON products.id = customers_products.product_id
-                INNER JOIN customers
-                ON customers_products.customer_id = customers.id
+                    INNER JOIN customers_products 
+                    ON products.id = customers_products.product_id
+                    INNER JOIN customers
+                    ON customers_products.customer_id = customers.id
             "#
         )
         .fetch_all(pool)
         .await;
 
-        result
-            .unwrap()
-            .iter()
-            .map(|record|
-                (record.customer, (record.name.to_string(), record.id as u32))
-            )
-            .collect();
-            todo!()
+        let mut products = HashMap::<String, HashMap<String, u32>>::new();
+        for rec in result.unwrap() {
+            let customer_products = match products.get_mut(&rec.customer) {
+                Some(customer_products) => customer_products,
+                None => {
+                    let customer_products = HashMap::<String, u32>::new();  
+                    products.insert(rec.customer.clone(), customer_products);
+                    products.get_mut(&rec.customer).unwrap()
+                },
+            };
+            customer_products.insert(rec.name, rec.id as u32);
+        }
+
+        products
     }
 
     async fn get_users_customers(pool: &SqlitePool) -> HashMap<String, u32>{

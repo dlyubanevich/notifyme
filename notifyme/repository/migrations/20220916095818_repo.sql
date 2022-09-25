@@ -54,8 +54,3 @@ CREATE TABLE "active_subscriptions" (
 	"subscription_id"	INTEGER NOT NULL,
 	FOREIGN KEY("subscription_id") REFERENCES "subscriptions"("id") ON DELETE CASCADE
 );
-
-CREATE TABLE "active_notifications" (
-	"notification_id"	INTEGER NOT NULL,
-	FOREIGN KEY("notification_id") REFERENCES "notifications"("id") ON DELETE CASCADE
-);

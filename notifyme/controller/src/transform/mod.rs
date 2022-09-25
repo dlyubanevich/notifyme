@@ -156,7 +156,7 @@ pub fn customer_response_from_repository_to_record(response: &CustomerResponseFr
         CustomerResponseFromRepository::Authorization { user_id, customer, .. } => {
             let user_id = *user_id;
             let event = "Response for customer authorization".to_string();
-            let customer = customer.to_owned();
+            let customer = customer.clone().map(|customer| customer.name);
             let record = CustomerEventRecord {
                 timestamp,
                 user_id,
@@ -363,11 +363,12 @@ pub fn customer_response_from_repository_to_customer_response(response: &Custome
             }
         }
         CustomerResponseFromRepository::ProductsForNotification {
-            user_id, products, ..
+            user_id, products, customer
         } => {
             let user_id = UserId::from(*user_id);
+            let customer = customer.to_owned();
             let products = products.to_owned();
-            CustomerResponse::ProductsForNotification { user_id, products }
+            CustomerResponse::ProductsForNotification { user_id, products, customer }
         }
         CustomerResponseFromRepository::NewNotification {
             user_id,

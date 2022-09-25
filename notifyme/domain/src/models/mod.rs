@@ -9,6 +9,20 @@ impl From<u32> for UserId {
         UserId(id)
     }
 }
+impl From<i64> for UserId {
+    fn from(id: i64) -> Self {
+        UserId(id as u32)
+    }
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Customer {
+    pub name: String,
+}
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Product {
+    pub name: String,
+}
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Notification {

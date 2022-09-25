@@ -3,7 +3,6 @@ use controller::{
 };
 use dotenv::dotenv;
 use message_queue::Client;
-use serde::Deserialize;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 
@@ -49,9 +48,4 @@ async fn main() {
         .await;     
 
     client.run();
-}
-#[derive(Deserialize, Debug)]
-struct Config {
-    request_queue: String,
-    repository_response_queue: String,
 }

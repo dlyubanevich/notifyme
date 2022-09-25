@@ -3,6 +3,6 @@ pub enum State {
     Start,
     Authorization,
     Command,
-    Subscriptions,
-    Notification,
+    AddNotification{customer: String},
+    SendNotification{customer: String, product: String},
 }

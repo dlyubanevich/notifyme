@@ -1,18 +1,18 @@
 use std::{sync::Arc, collections:: HashMap};
 
 use domain::{
-    requests::ClientRequest, models::Customer,
+    requests::CustomerRequest, models::{Customer, UserId},
 };
 use dotenv::dotenv;
 use message_queue::{Client, Publisher};
 use serde::{Deserialize, Serialize};
-use telegram_bot::{customer::{response_delegate, MessageHandler, Service, state::State}, storage::StateStorage };
+use telegram_bot::{customer::{response_delegate, MessageHandler, Service, state::State}, storage::StateStorage, HandlerResult };
 use teloxide::{
     dispatching::{update_listeners::webhooks, UpdateFilterExt},
     dptree,
     prelude::{AutoSend, Dispatcher, LoggingErrorHandler},
     requests::{Requester, RequesterExt},
-    types::{CallbackQuery, Message, Update, ChatId, InlineKeyboardButton, InlineKeyboardMarkup},
+    types::{CallbackQuery, Message, Update, ChatId, InlineKeyboardButton, InlineKeyboardMarkup, KeyboardRemove},
     Bot, payloads::SendMessageSetters,
 };
 
@@ -31,8 +31,8 @@ async fn main() {
     let token = std::env::var("CUSTOMER_TOKEN").unwrap();
 
     let bot = Bot::new(token).auto_send();
-    let addr = ([127, 0, 0, 1], 8080).into();
-    let url = Url::parse("https://0b74-95-27-196-32.eu.ngrok.io").unwrap();
+    let addr = ([127, 0, 0, 1], 8081).into();
+    let url = Url::parse("https://7aba-95-27-196-93.eu.ngrok.io").unwrap();
     let listener = webhooks::axum(bot.clone(), webhooks::Options::new(addr, url))
         .await
         .expect("Couldn't setup webhook");
@@ -42,9 +42,10 @@ async fn main() {
     let service = Service::new(bot.clone(), state_storage.clone(), authorized_customers.clone());
     let queue_handler = Arc::new(Mutex::new(MessageHandler::new(service)));
 
+    let response_queue = std::env::var("CUSTOMER_RESPONSE_QUEUE").unwrap();
     let mut client = Client::new("amqp://localhost:5672").await;
     client
-        .with_consumer("response", response_delegate(queue_handler))
+        .with_consumer(&response_queue, response_delegate(queue_handler))
         .await;
 
     let message_handler = Update::filter_message().endpoint(message_handler);
@@ -54,11 +55,7 @@ async fn main() {
         .branch(message_handler)
         .branch(callback_query_handler);
 
-    
-    let params = ConfigParams {
-        authorized_customers,
-        publisher: client.get_publisher(),
-    };
+    let params = ConfigParams::new(authorized_customers, client.get_publisher());
 
     Dispatcher::builder(bot, handler)
         .dependencies(dptree::deps![state_storage, params])
@@ -75,9 +72,21 @@ async fn main() {
 struct ConfigParams {
     authorized_customers: Arc<Mutex<HashMap<ChatId, Customer>>>,
     publisher: Arc<Mutex<Publisher>>,
+    exchange: String,
+    request_queue: String,
 }
-
-type HandlerResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
+impl ConfigParams {
+    fn new(authorized_customers: Arc<Mutex<HashMap<ChatId, Customer>>>, publisher: Arc<Mutex<Publisher>>) -> Self {
+        let exchange = std::env::var("EXCHANGE").unwrap();
+        let request_queue = std::env::var("CUSTOMER_REQUEST_QUEUE").unwrap();
+        ConfigParams {
+            authorized_customers,
+            publisher,
+            exchange,
+            request_queue,
+        }
+    }
+}
 
 async fn message_handler(
     bot: AutoSend<Bot>,
@@ -95,8 +104,8 @@ async fn message_handler(
         State::Start => start(bot, msg, storage, params).await?,
         State::Authorization => authorization(msg, params).await?,
         State::Command => choose_command(bot, msg).await?,
-        State::Subscriptions => show_subscriptions(msg, params).await?,
-        State::Notification => add_notification(msg, params).await?,
+        State::AddNotification{customer} => add_notification(bot, msg, storage, customer).await?,
+        State::SendNotification{customer, product} => send_notification(msg, params, customer, product).await?,
     }
 
     Ok(())
@@ -125,12 +134,12 @@ async fn authorization(
 ) -> HandlerResult {
     log::info!("Authorization for user [{}]", msg.chat.id.0);
     let key = msg.text().unwrap().to_owned();
-    let message = ClientRequest::CustomerAuthorization { user_id: msg.chat.id.0 as u32, key }.to_string();
+    let message = CustomerRequest::Authorization { user_id: UserId::from(msg.chat.id.0), key, timestamp: msg.date.timestamp(), }.to_string();
     params
         .publisher
         .lock()
         .await
-        .publish_message("notifyme", "request.customer", message)
+        .publish_message(&params.exchange, &params.request_queue, message)
         .await;
     Ok(())
 }
@@ -141,18 +150,87 @@ async fn choose_command(
     log::info!("Choose command for user [{}]", msg.chat.id.0);
     let keyboard: Vec<Vec<InlineKeyboardButton>> = vec![
         vec![
-            InlineKeyboardButton::callback("Показать подписки".to_owned(), Command::ShowSubscriptions), 
             InlineKeyboardButton::callback("Создать уведомление".to_owned(), Command::AddNotification)
         ]
     ];
-    bot.send_message(msg.chat.id, "Что нужно сделать?").reply_markup(InlineKeyboardMarkup::new(keyboard)).await?; 
+    bot.send_message(msg.chat.id, "Что хотите сделать?").reply_markup(InlineKeyboardMarkup::new(keyboard)).await?; 
+
+    Ok(())
+}
+
+async fn add_notification(
+    bot: AutoSend<Bot>,
+    msg: Message,
+    storage: Arc<StateStorage<State>>,
+    customer: String
+) -> HandlerResult {
+    log::info!("add notification for user [{}]", msg.chat.id.0);
+    let product = msg.text().unwrap().to_string();
+    bot
+        .send_message(msg.chat.id, "Введите текст уведомления (он будет отправлен клиентам):")
+        .reply_markup(KeyboardRemove::new())
+        .await?;
+    
+    storage.set_state(msg.chat.id, State::SendNotification { customer, product }).await;
+
+    Ok(())
+}
+
+async fn send_notification(
+    msg: Message,
+    params: ConfigParams,
+    customer: String,
+    product: String,
+) -> HandlerResult {
+    log::info!("add notification for user [{}]", msg.chat.id.0);
+    let user_id = UserId::from(msg.chat.id.0);
+    let timestamp = msg.date.timestamp();
+    let notification = msg.text().unwrap().to_string();
+    let message = CustomerRequest::NewNotification { user_id, customer, product, notification, timestamp}.to_string();
+    params
+        .publisher
+        .lock()
+        .await
+        .publish_message(&params.exchange, &params.request_queue, message)
+        .await;
+    
+    Ok(())
+}
+
+async fn callback_handler(q: CallbackQuery, bot: AutoSend<Bot>, params: ConfigParams) -> HandlerResult {
+    if let Some(data) = q.data {
+        log::info!("Callback [{}]", data);
+        
+        if let Some(message) = q.message {
+            bot.delete_message(message.chat.id, message.id).await?;
+            let text = message.text().unwrap().to_owned();
+            bot.send_message(message.chat.id, text).await?; 
+            let command: Command = data.into();
+            match command {
+                Command::AddNotification => {
+                    let user_id = UserId::from(message.chat.id.0);
+                    let timestamp = message.date.timestamp();
+                    let customer = params.authorized_customers.lock().await.get(&message.chat.id).unwrap().name.to_string();
+                    let message = CustomerRequest::ProductsForNotification { user_id, customer, timestamp }.to_string();
+                    params
+                        .publisher
+                        .lock()
+                        .await
+                        .publish_message(&params.exchange, &params.request_queue, message)
+                        .await;
+                },
+            };
+        }
+
+    } else {
+        log::info!("None of callback");
+    }
 
     Ok(())
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 enum Command {
-    ShowSubscriptions,
     AddNotification,
 }
 
@@ -165,63 +243,4 @@ impl From<String> for Command {
     fn from(s: String) -> Self {
         serde_json::from_str(&s).unwrap()
     }
-}
-
-async fn show_subscriptions(
-    msg: Message,
-    params: ConfigParams,
-) -> HandlerResult {
-    log::info!("show subscriptions for user [{}]", msg.chat.id.0);
-    let user_id = msg.chat.id.0 as u32;
-    let customer = params.authorized_customers.lock().await.get(&msg.chat.id).unwrap().to_owned();
-    let message = ClientRequest::Subscriptions { user_id, customer }.to_string();
-    params
-        .publisher
-        .lock()
-        .await
-        .publish_message("notifyme", "request.customer", message)
-        .await;
-    
-    Ok(())
-}
-
-async fn add_notification(
-    msg: Message,
-    params: ConfigParams,
-) -> HandlerResult {
-    log::info!("add notification for user [{}]", msg.chat.id.0);
-    let user_id = msg.chat.id.0 as u32;
-    let customer = params.authorized_customers.lock().await.get(&msg.chat.id).unwrap().to_owned();
-    let message = ClientRequest::Subscriptions { user_id, customer }.to_string();
-    params
-        .publisher
-        .lock()
-        .await
-        .publish_message("notifyme", "request.customer", message)
-        .await;
-    
-    Ok(())
-}
-
-async fn callback_handler(q: CallbackQuery, bot: AutoSend<Bot>, storage: Arc<StateStorage<State>>,) -> HandlerResult {
-    if let Some(data) = q.data {
-        log::info!("Callback [{}]", data);
-        
-        if let Some(message) = q.message {
-            bot.delete_message(message.chat.id, message.id).await?;
-            let text = message.text().unwrap().to_owned();
-            bot.send_message(message.chat.id, text).await?; 
-            let command: Command = data.into();
-            let state = match command {
-                Command::ShowSubscriptions => State::Subscriptions,
-                Command::AddNotification => State::Notification,
-            };
-            storage.set_state(message.chat.id, state).await;
-        }
-
-    } else {
-        log::info!("None of callback");
-    }
-
-    Ok(())
 }

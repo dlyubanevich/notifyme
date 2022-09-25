@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use domain::{
-    requests::ClientRequest,
+    requests::ClientRequest, models::UserId,
 };
 use dotenv::dotenv;
 use message_queue::{Client, Publisher};
@@ -11,8 +11,8 @@ use teloxide::{
     dispatching::{update_listeners::webhooks, UpdateFilterExt},
     dptree,
     prelude::{AutoSend, Dispatcher, LoggingErrorHandler},
-    requests::{Requester, RequesterExt},
-    types::{CallbackQuery, Message, Update},
+    requests::RequesterExt,
+    types::{Message, Update},
     Bot,
 };
 
@@ -28,11 +28,11 @@ async fn main() {
 
     dotenv().ok();
 
-    let token = std::env::var("TELOXIDE_TOKEN").unwrap();
+    let token = std::env::var("CLIENT_TOKEN").unwrap();
 
     let bot = Bot::new(token).auto_send();
     let addr = ([127, 0, 0, 1], 8080).into();
-    let url = Url::parse("https://0b74-95-27-196-32.eu.ngrok.io").unwrap();
+    let url = Url::parse("https://06df-95-27-196-93.eu.ngrok.io").unwrap();
     let listener = webhooks::axum(bot.clone(), webhooks::Options::new(addr, url))
         .await
         .expect("Couldn't setup webhook");
@@ -40,22 +40,18 @@ async fn main() {
     let service = Service::new(bot.clone());
     let queue_handler = Arc::new(Mutex::new(MessageHandler::new(service)));
 
+    let response_queue = std::env::var("CLIENT_RESPONSE_QUEUE").unwrap();
     let mut client = Client::new("amqp://localhost:5672").await;
     client
-        .with_consumer("response", response_delegate(queue_handler))
+        .with_consumer(&response_queue, response_delegate(queue_handler))
         .await;
 
     let message_handler = Update::filter_message().endpoint(message_handler);
-    let callback_query_handler = Update::filter_callback_query().endpoint(callback_handler);
 
-    let handler = dptree::entry()
-        .branch(message_handler)
-        .branch(callback_query_handler);
+    let handler = dptree::entry().branch(message_handler);
 
     let state_storage = StateStorage::<State>::new();
-    let params = ConfigParams {
-        publisher: client.get_publisher(),
-    };
+    let params = ConfigParams::new(client.get_publisher());
 
     Dispatcher::builder(bot, handler)
         .dependencies(dptree::deps![state_storage, params])
@@ -71,6 +67,19 @@ async fn main() {
 #[derive(Clone)]
 struct ConfigParams {
     publisher: Arc<Mutex<Publisher>>,
+    exchange: String,
+    request_queue: String,
+}
+impl ConfigParams {
+    fn new(publisher: Arc<Mutex<Publisher>>) -> Self {
+        let exchange = std::env::var("EXCHANGE").unwrap();
+        let request_queue = std::env::var("CLIENT_REQUEST_QUEUE").unwrap();
+        ConfigParams {
+            publisher,
+            exchange,
+            request_queue,
+        }
+    }
 }
 
 type HandlerResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
@@ -104,7 +113,8 @@ async fn choose_customer(
 ) -> HandlerResult {
     log::info!("Choose customer for user [{}]", msg.chat.id.0);
     let message = ClientRequest::Customers {
-        user_id: msg.chat.id.0 as u32,
+        user_id: UserId::from(msg.chat.id.0),
+        timestamp: msg.date.timestamp(),
     }
     .to_string();
     
@@ -112,7 +122,7 @@ async fn choose_customer(
         .publisher
         .lock()
         .await
-        .publish_message("notifyme", "request", message)
+        .publish_message(&params.exchange, &params.request_queue, message)
         .await;
     storage.set_state(msg.chat.id, State::Customer).await;
     Ok(())
@@ -126,15 +136,16 @@ async fn choose_product(
     log::info!("choose product for user [{}]", msg.chat.id.0);
     let customer = String::from(msg.text().unwrap());
     let message = ClientRequest::Products {
-        user_id: msg.chat.id.0 as u32,
+        user_id: UserId::from(msg.chat.id.0),
         customer: customer.clone(),
+        timestamp: msg.date.timestamp(),
     }
     .to_string();
     params
         .publisher
         .lock()
         .await
-        .publish_message("notifyme", "request", message)
+        .publish_message(&params.exchange, &params.request_queue, message)
         .await;
     storage
         .set_state(msg.chat.id, State::Product { customer })
@@ -151,43 +162,18 @@ async fn add_subscription(
     log::info!("add subscription for user [{}]", msg.chat.id.0);
     let product = String::from(msg.text().unwrap());
     let message = ClientRequest::NewSubscription {
-        user_id: msg.chat.id.0 as u32,
+        user_id: UserId::from(msg.chat.id.0),
         customer,
         product,
+        timestamp: msg.date.timestamp(),
     }
     .to_string();
     params
         .publisher
         .lock()
         .await
-        .publish_message("notifyme", "request", message)
+        .publish_message(&params.exchange, &params.request_queue, message)
         .await;
     storage.set_state(msg.chat.id, State::End).await;
     Ok(())
 }
-
-async fn callback_handler(q: CallbackQuery, bot: AutoSend<Bot>) -> HandlerResult {
-    if let Some(version) = q.data {
-        log::info!("Callback [{}]", version);
-        let text = format!("You chose: {version}");
-
-        match q.message {
-            Some(Message { id, chat, .. }) => {
-                bot.edit_message_text(chat.id, id, text).await?;
-            }
-            None => {
-                if let Some(id) = q.inline_message_id {
-                    bot.edit_message_text_inline(id, text).await?;
-                }
-            }
-        }
-
-        log::info!("You chose: {}", version);
-    } else {
-        log::info!("None of callback");
-    }
-
-    Ok(())
-}
-
-

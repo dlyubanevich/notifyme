@@ -1,16 +1,16 @@
 use serde::{Deserialize, Serialize};
 
-use crate::models::{Notification, UserId};
+use crate::models::{Notification, UserId, Customer, Product};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum ClientResponse {
     Customers {
         user_id: UserId,
-        customers: Vec<String>,
+        customers: Vec<Customer>,
     },
     Products {
         user_id: UserId,
-        products: Vec<String>,
+        products: Vec<Product>,
     },
     SubscriptionSuccess {
         user_id: UserId,
@@ -30,14 +30,15 @@ pub enum ClientResponse {
 pub enum CustomerResponse {
     AuthorizationSuccess {
         user_id: UserId,
-        customer: String,
+        customer: Customer,
     },
     AuthorizationFailure {
         user_id: UserId,
     },
     ProductsForNotification {
         user_id: UserId,
-        products: Vec<String>,
+        customer: String,
+        products: Vec<Product>,
     },
     NotificationSuccess {
         user_id: UserId,
@@ -56,11 +57,11 @@ pub enum CustomerResponse {
 pub enum ClientResponseFromRepository {
     Customers {
         user_id: u32,
-        customers: Vec<String>,
+        customers: Vec<Customer>,
     },
     Products {
         user_id: u32,
-        products: Vec<String>,
+        products: Vec<Product>,
     },
     NewSubscription {
         user_id: u32,
@@ -72,12 +73,12 @@ pub enum ClientResponseFromRepository {
 pub enum CustomerResponseFromRepository {
     Authorization {
         user_id: u32,
-        customer: Option<String>,
+        customer: Option<Customer>,
     },
     ProductsForNotification {
         user_id: u32,
         customer: String,
-        products: Vec<String>,
+        products: Vec<Product>,
     },
     NewNotification {
         user_id: u32,

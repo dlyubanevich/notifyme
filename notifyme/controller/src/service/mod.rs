@@ -15,8 +15,8 @@ pub struct ControllerService {
 impl ControllerService {
     pub fn new(publisher: Arc<Mutex<Publisher>>) -> Self {
         let exchange = std::env::var("EXCHANGE").unwrap();
-        let repository_client_request_queue = std::env::var("REPOSITORY_CLIENT_REQUEST_QUEUE").unwrap();
-        let repository_customer_request_queue = std::env::var("REPOSITORY_CUSTOMER_REQUEST_QUEUE").unwrap();
+        let repository_client_request_queue = std::env::var("CLIENT_REPOSITORY_REQUEST_QUEUE").unwrap();
+        let repository_customer_request_queue = std::env::var("CUSTOMER_REPOSITORY_REQUEST_QUEUE").unwrap();
         let repository_request_queue = std::env::var("REPOSITORY_REQUEST_QUEUE").unwrap();
         let history_queue = std::env::var("HISTORY_QUEUE").unwrap();
         let client_response_queue = std::env::var("CLIENT_RESPONSE_QUEUE").unwrap();
@@ -67,7 +67,7 @@ impl ControllerService {
                 .publish_message(
                     &self.config.exchange,
                     &self.config.repository_request_queue,
-                    repository_request.to_string(),
+                    request_to_repository.to_string(),
                 )
                 .await;
         } 
@@ -106,7 +106,7 @@ impl ControllerService {
                 .publish_message(
                     &self.config.exchange,
                     &self.config.repository_request_queue,
-                    repository_request.to_string(),
+                    request_to_repository.to_string(),
                 )
                 .await;
         }    
@@ -185,7 +185,7 @@ impl ControllerService {
                     publisher
                         .publish_message(
                             &self.config.exchange,
-                            &self.config.client_response_queue,
+                            &self.config.customer_response_queue,
                             response.to_string(),
                         )
                         .await;    

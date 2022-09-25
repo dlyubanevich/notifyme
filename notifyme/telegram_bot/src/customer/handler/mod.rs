@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use domain::responses::ClientResponse;
+use domain::responses::CustomerResponse;
 use lapin::{message::DeliveryResult, options::BasicAckOptions, ConsumerDelegate};
 use tokio::sync::Mutex;
 
@@ -15,7 +15,7 @@ impl MessageHandler {
         MessageHandler { service }
     }
     pub async fn handle_response(&mut self, message: String) -> HandlerResult {
-        let response: ClientResponse = serde_json::from_str(&message).unwrap();
+        let response: CustomerResponse = serde_json::from_str(&message).unwrap();
         self.service.handle_response(response).await?;
         Ok(())
     }
@@ -41,12 +41,13 @@ pub fn response_delegate(
 
             // Do something with the delivery data (The message payload)
             let message = String::from_utf8_lossy(&delivery.data).to_string();
-            if handler.lock().await.handle_response(message).await.is_ok() {
-                delivery
-                    .ack(BasicAckOptions::default())
-                    .await
-                    .expect("Failed to ack send_webhook_event message");              
-            }
+            if let Err(error) = handler.lock().await.handle_response(message).await {
+                log::error!("Error handle response: [{}]", error.to_string());
+            };    
+            delivery
+                .ack(BasicAckOptions::default())
+                .await
+                .expect("Failed to ack send_webhook_event message"); 
         }
     }
 }

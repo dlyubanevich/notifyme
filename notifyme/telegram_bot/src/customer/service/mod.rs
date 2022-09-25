@@ -1,13 +1,13 @@
 use std::{sync::Arc, collections::HashMap};
 
-use domain::{responses::ClientResponse, models::Customer};
+use domain::{responses::CustomerResponse, models::Customer};
 use teloxide::{
     prelude::AutoSend,
     requests::Requester,
     types::{
-        ChatId,
+        ChatId, KeyboardButton, KeyboardMarkup,
     },
-    Bot,
+    Bot, payloads::SendMessageSetters,
 };
 use tokio::sync::Mutex;
 
@@ -23,22 +23,24 @@ impl Service {
     pub fn new(bot: AutoSend<Bot>, state_storage: Arc<StateStorage<State>>, authorized_customers: Arc<Mutex<HashMap<ChatId, Customer>>>) -> Self {
         Service { bot, state_storage, authorized_customers }
     }
-    pub async fn handle_response(&mut self, response: ClientResponse) -> HandlerResult {
+    pub async fn handle_response(&mut self, response: CustomerResponse) -> HandlerResult {
         match response {
-            ClientResponse::CustomerAuthorizationFailure { user_id } => {
+            CustomerResponse::AuthorizationFailure { user_id } => {
+                let chat_id = ChatId(user_id.0 as i64);
                 self.bot
                     .send_message(
-                        ChatId(user_id as i64),
-                        "Не верный ключ! Повторите попытку:",
+                        chat_id,
+                        "Указан не верный ключ!",
                     )
                     .await?;
-                    Ok(())
+                self.state_storage.set_state(chat_id, State::Start).await;    
+                Ok(())
             },
-            ClientResponse::CustomerAuthorizationSuccess { user_id, customer } => {
-                let chat_id = ChatId(user_id as i64);
+            CustomerResponse::AuthorizationSuccess { user_id, customer } => {
+                let chat_id = ChatId(user_id.0 as i64);
                 let customer_name = customer.name.to_string();
                 self.authorized_customers.lock().await.insert(chat_id, customer);
-                self.state_storage.set_state(chat_id, State::Command).await;
+                self.state_storage.set_state(chat_id, State::Start).await;
                 let text = format!("Добро пожаловать, {}", customer_name);
                 self.bot
                     .send_message(
@@ -48,25 +50,68 @@ impl Service {
                     .await?;
                 Ok(())
             },
-            ClientResponse::Subscriptions { user_id, products } => {
-                let chat_id = ChatId(user_id as i64);
-                let text = match products.len() {
-                    0 => "Нет подписок на товары!".to_string(),
-                    n => {
-                        let list = products.join(";\n");
-                        format!("У вас {n} подписки(ок) на следующие товары:\n{list}")
+            CustomerResponse::ProductsForNotification { user_id, customer, products } => {
+                let chat_id = ChatId(user_id.0 as i64);
+                match products.len() {
+                    0 => {
+                        self.bot
+                            .send_message(chat_id, "Нет подписок на товары!")
+                            .await?;
+                        self.state_storage.set_state(chat_id, State::Start).await;    
+                    },
+                    _ => {
+                        let mut keyboard: Vec<Vec<KeyboardButton>> = vec![];
+                        for products in products.chunks(3) {
+                            let row = products
+                                .iter()
+                                .map(|product| KeyboardButton::new(product.name.clone()))
+                                .collect();
+                            keyboard.push(row);
+                        }
+                        self.bot
+                            .send_message(chat_id, "Выберите товар:")
+                            .reply_markup(KeyboardMarkup::new(keyboard))
+                            .await?;
+                        self.state_storage.set_state(chat_id, State::AddNotification { customer }).await;    
                     }
-                }; 
+                };
+                
+                Ok(())
+            },
+            CustomerResponse::NotificationSuccess { user_id } => {
+                let chat_id = ChatId(user_id.0 as i64);
+                self.bot
+                    .send_message(
+                        chat_id,
+                        "Уведомление успешно отправлено!",
+                    )
+                    .await?;
+                self.state_storage.set_state(chat_id, State::Start).await;    
+                Ok(())
+            },
+            CustomerResponse::NotificationFailure { user_id } => {
+                let chat_id = ChatId(user_id.0 as i64);
+                self.bot
+                    .send_message(
+                        chat_id,
+                        "Не удалось отправить уведомление!",
+                    )
+                    .await?;
+                self.state_storage.set_state(chat_id, State::Start).await;    
+                Ok(())
+            },
+            CustomerResponse::ClientSubscription { user_id, product, .. } => {
+                let chat_id = ChatId(user_id.0 as i64);
+                let text = format!("Оформлена подписка на товар [{product}]!");
                 self.bot
                     .send_message(
                         chat_id,
                         text,
                     )
-                    .await?; 
-                self.state_storage.set_state(chat_id, State::Command).await;
-                Ok(())
+                    .await?;
+                Ok(())     
             }
-            _ => todo!(),
         }
     }
+
 }

@@ -46,7 +46,6 @@ impl SqliteRepository {
             Ok(connection) => connection,
             Err(error) => return Err(DatabaseErrors::ConnectionError(error.to_string())),
         };
-        println!("{:?}", record);
         let result = sqlx::query!(
             r#"
             INSERT INTO customers ( timestamp, user_id, customer, data, event )
