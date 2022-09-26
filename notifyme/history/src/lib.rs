@@ -1,2 +1,4 @@
 pub mod repository;
-pub mod service;
+mod service;
+
+pub use service::HistoryService;

@@ -2,7 +2,7 @@ use domain::records::Record;
 use dotenv::dotenv;
 use std::sync::Arc;
 
-use history::{repository::SqliteRepository, service::HistoryService};
+use history::{repository::SqliteRepository, HistoryService};
 use rabbitmq_client::{IncomingMessageHandler, RabbitMqClient};
 use tokio::sync::Mutex;
 
