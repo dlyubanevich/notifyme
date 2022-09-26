@@ -1,0 +1,12 @@
+[package]
+name = "rabbitmq_client"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+thiserror = "1.0.*"
+lapin = "2.*"
+dotenv = "0.15.*"
+tokio = { version = "1.21.*", features = ["macros", "rt-multi-thread"] }
+tokio-executor-trait = "2.*"
+tokio-reactor-trait = "1.*"

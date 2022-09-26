@@ -1,14 +1,19 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use domain::{
-    models::{CustomerEventRecord, UserEventRecord, UserId, Notification},
+    models::{CustomerEventRecord, Notification, UserEventRecord, UserId},
     records::Record,
-    requests::{ClientRequestToRepository, ClientRequest, CustomerRequest, RequestToRepository, CustomerRequestToRepository},
-    responses::{ClientResponseFromRepository, CustomerResponseFromRepository, ClientResponse, CustomerResponse, ResponseFromRepository},
+    requests::{
+        ClientRequest, ClientRequestToRepository, CustomerRequest, CustomerRequestToRepository,
+        RequestToRepository,
+    },
+    responses::{
+        ClientResponse, ClientResponseFromRepository, CustomerResponse,
+        CustomerResponseFromRepository, ResponseFromRepository,
+    },
 };
 
 pub fn client_request_to_record(request: &ClientRequest) -> Record {
-
     let data = request.to_string();
 
     match request {
@@ -24,7 +29,9 @@ pub fn client_request_to_record(request: &ClientRequest) -> Record {
             };
             Record::UserEvent(record)
         }
-        ClientRequest::Products { user_id, timestamp, .. } => {
+        ClientRequest::Products {
+            user_id, timestamp, ..
+        } => {
             let user_id = user_id.0;
             let timestamp = *timestamp;
             let event = "Request for products".to_string();
@@ -36,7 +43,9 @@ pub fn client_request_to_record(request: &ClientRequest) -> Record {
             };
             Record::UserEvent(record)
         }
-        ClientRequest::NewSubscription { user_id, timestamp, .. } => {
+        ClientRequest::NewSubscription {
+            user_id, timestamp, ..
+        } => {
             let user_id = user_id.0;
             let timestamp = *timestamp;
             let event = "Request for new subscription".to_string();
@@ -51,7 +60,9 @@ pub fn client_request_to_record(request: &ClientRequest) -> Record {
     }
 }
 
-pub fn client_response_from_repository_to_record(response: &ClientResponseFromRepository) -> Record {
+pub fn client_response_from_repository_to_record(
+    response: &ClientResponseFromRepository,
+) -> Record {
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
@@ -96,11 +107,12 @@ pub fn client_response_from_repository_to_record(response: &ClientResponseFromRe
 }
 
 pub fn customer_request_to_record(request: &CustomerRequest) -> Record {
-
     let data = request.to_string();
 
     match request {
-        CustomerRequest::Authorization { user_id, timestamp, .. } => {
+        CustomerRequest::Authorization {
+            user_id, timestamp, ..
+        } => {
             let user_id = user_id.0;
             let timestamp = *timestamp;
             let event = "Request for customer authorization".to_string();
@@ -113,12 +125,16 @@ pub fn customer_request_to_record(request: &CustomerRequest) -> Record {
                 event,
             };
             Record::CustomerEvent(record)
-        },
-        CustomerRequest::ProductsForNotification { user_id, customer, timestamp } => {
+        }
+        CustomerRequest::ProductsForNotification {
+            user_id,
+            customer,
+            timestamp,
+        } => {
             let user_id = user_id.0;
             let timestamp = *timestamp;
             let customer = Some(customer.clone());
-            let event = "Request for products for notification".to_string();  
+            let event = "Request for products for notification".to_string();
             let record = CustomerEventRecord {
                 timestamp,
                 user_id,
@@ -127,8 +143,13 @@ pub fn customer_request_to_record(request: &CustomerRequest) -> Record {
                 event,
             };
             Record::CustomerEvent(record)
-        },
-        CustomerRequest::NewNotification { user_id, customer, timestamp, .. } => {
+        }
+        CustomerRequest::NewNotification {
+            user_id,
+            customer,
+            timestamp,
+            ..
+        } => {
             let user_id = user_id.0;
             let timestamp = *timestamp;
             let customer = Some(customer.clone());
@@ -141,11 +162,13 @@ pub fn customer_request_to_record(request: &CustomerRequest) -> Record {
                 event,
             };
             Record::CustomerEvent(record)
-        },
+        }
     }
 }
 
-pub fn customer_response_from_repository_to_record(response: &CustomerResponseFromRepository) -> Record {
+pub fn customer_response_from_repository_to_record(
+    response: &CustomerResponseFromRepository,
+) -> Record {
     let timestamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
@@ -153,7 +176,9 @@ pub fn customer_response_from_repository_to_record(response: &CustomerResponseFr
     let data = response.to_string();
 
     match response {
-        CustomerResponseFromRepository::Authorization { user_id, customer, .. } => {
+        CustomerResponseFromRepository::Authorization {
+            user_id, customer, ..
+        } => {
             let user_id = *user_id;
             let event = "Response for customer authorization".to_string();
             let customer = customer.clone().map(|customer| customer.name);
@@ -166,7 +191,9 @@ pub fn customer_response_from_repository_to_record(response: &CustomerResponseFr
             };
             Record::CustomerEvent(record)
         }
-        CustomerResponseFromRepository::ProductsForNotification { user_id, customer, .. } => {
+        CustomerResponseFromRepository::ProductsForNotification {
+            user_id, customer, ..
+        } => {
             let user_id = *user_id;
             let event = "Response for products for notification".to_string();
             let customer = Some(customer.clone());
@@ -179,7 +206,9 @@ pub fn customer_response_from_repository_to_record(response: &CustomerResponseFr
             };
             Record::CustomerEvent(record)
         }
-        CustomerResponseFromRepository::NewNotification { user_id, customer, .. } => {
+        CustomerResponseFromRepository::NewNotification {
+            user_id, customer, ..
+        } => {
             let user_id = *user_id;
             let event = "Response for new notification".to_string();
             let customer = Some(customer.clone());
@@ -203,7 +232,9 @@ pub fn request_to_repository_to_record(request: &RequestToRepository) -> Record 
     let data = request.to_string();
 
     match request {
-        RequestToRepository::NotificationForClients { user_id, customer, .. } => {
+        RequestToRepository::NotificationForClients {
+            user_id, customer, ..
+        } => {
             let user_id = *user_id;
             let event = "Request for notification for clients".to_string();
             let customer = Some(customer.clone());
@@ -215,7 +246,7 @@ pub fn request_to_repository_to_record(request: &RequestToRepository) -> Record 
                 event,
             };
             Record::CustomerEvent(record)
-        },
+        }
         RequestToRepository::SubscriptionForCustomer { user_id, .. } => {
             let user_id = *user_id;
             let event = "Request for subscription for customer".to_string();
@@ -226,9 +257,8 @@ pub fn request_to_repository_to_record(request: &RequestToRepository) -> Record 
                 event,
             };
             Record::UserEvent(record)
-        },
+        }
     }
-
 }
 
 pub fn response_from_repository_to_record(response: &ResponseFromRepository) -> Record {
@@ -249,8 +279,10 @@ pub fn response_from_repository_to_record(response: &ResponseFromRepository) -> 
                 event,
             };
             Record::UserEvent(record)
-        },
-        ResponseFromRepository::Subscription { user_id, customer, .. } => {
+        }
+        ResponseFromRepository::Subscription {
+            user_id, customer, ..
+        } => {
             let user_id = *user_id;
             let event = "Response for subscription for customer".to_string();
             let customer = Some(customer.clone());
@@ -262,25 +294,31 @@ pub fn response_from_repository_to_record(response: &ResponseFromRepository) -> 
                 event,
             };
             Record::CustomerEvent(record)
-        },
+        }
     }
 }
 
-pub fn client_request_to_repository_to_client_request(request: &ClientRequest) -> ClientRequestToRepository {
+pub fn client_request_to_repository_to_client_request(
+    request: &ClientRequest,
+) -> ClientRequestToRepository {
     match request {
         ClientRequest::Customers { user_id, .. } => {
             let user_id = user_id.0;
             ClientRequestToRepository::Customers { user_id }
         }
-        ClientRequest::Products { user_id, customer, .. } => {
+        ClientRequest::Products {
+            user_id, customer, ..
+        } => {
             let user_id = user_id.0;
             let customer = customer.clone();
-            ClientRequestToRepository::Products {
-                user_id,
-                customer,
-            }
+            ClientRequestToRepository::Products { user_id, customer }
         }
-        ClientRequest::NewSubscription { user_id, customer, product, .. } => {
+        ClientRequest::NewSubscription {
+            user_id,
+            customer,
+            product,
+            ..
+        } => {
             let user_id = user_id.0;
             let customer = customer.clone();
             let product = product.clone();
@@ -293,7 +331,9 @@ pub fn client_request_to_repository_to_client_request(request: &ClientRequest) -
     }
 }
 
-pub fn client_response_from_repository_to_client_response(response: &ClientResponseFromRepository) -> ClientResponse {
+pub fn client_response_from_repository_to_client_response(
+    response: &ClientResponseFromRepository,
+) -> ClientResponse {
     match response {
         ClientResponseFromRepository::Customers { user_id, customers } => {
             let user_id = UserId::from(*user_id);
@@ -315,26 +355,28 @@ pub fn client_response_from_repository_to_client_response(response: &ClientRespo
     }
 }
 
-pub fn customer_request_to_repository_to_customer_request(request: &CustomerRequest) -> CustomerRequestToRepository {
+pub fn customer_request_to_repository_to_customer_request(
+    request: &CustomerRequest,
+) -> CustomerRequestToRepository {
     match request {
         CustomerRequest::Authorization { user_id, key, .. } => {
             let user_id = user_id.0;
             let key = key.clone();
             CustomerRequestToRepository::Authorization { user_id, key }
         }
-        CustomerRequest::ProductsForNotification { user_id, customer, .. } => {
+        CustomerRequest::ProductsForNotification {
+            user_id, customer, ..
+        } => {
             let user_id = user_id.0;
             let customer = customer.clone();
-            CustomerRequestToRepository::ProductsForNotification {
-                user_id,
-                customer,
-            }
+            CustomerRequestToRepository::ProductsForNotification { user_id, customer }
         }
         CustomerRequest::NewNotification {
             user_id,
             customer,
             product,
-            notification, ..
+            notification,
+            ..
         } => {
             let user_id = user_id.0;
             let customer = customer.clone();
@@ -350,7 +392,9 @@ pub fn customer_request_to_repository_to_customer_request(request: &CustomerRequ
     }
 }
 
-pub fn customer_response_from_repository_to_customer_response(response: &CustomerResponseFromRepository) -> CustomerResponse {
+pub fn customer_response_from_repository_to_customer_response(
+    response: &CustomerResponseFromRepository,
+) -> CustomerResponse {
     match response {
         CustomerResponseFromRepository::Authorization { user_id, customer } => {
             let user_id = UserId::from(*user_id);
@@ -363,17 +407,21 @@ pub fn customer_response_from_repository_to_customer_response(response: &Custome
             }
         }
         CustomerResponseFromRepository::ProductsForNotification {
-            user_id, products, customer
+            user_id,
+            products,
+            customer,
         } => {
             let user_id = UserId::from(*user_id);
             let customer = customer.to_owned();
             let products = products.to_owned();
-            CustomerResponse::ProductsForNotification { user_id, products, customer }
+            CustomerResponse::ProductsForNotification {
+                user_id,
+                products,
+                customer,
+            }
         }
         CustomerResponseFromRepository::NewNotification {
-            user_id,
-            success,
-            ..
+            user_id, success, ..
         } => {
             let user_id = UserId::from(*user_id);
             match success {
@@ -384,28 +432,52 @@ pub fn customer_response_from_repository_to_customer_response(response: &Custome
     }
 }
 
-pub fn client_request_to_repository_request(request: &ClientRequest) -> Option<RequestToRepository> {
+pub fn client_request_to_repository_request(
+    request: &ClientRequest,
+) -> Option<RequestToRepository> {
     match request {
-        ClientRequest::NewSubscription { user_id, customer, product, .. } => {
+        ClientRequest::NewSubscription {
+            user_id,
+            customer,
+            product,
+            ..
+        } => {
             let user_id = user_id.0;
             let customer = customer.clone();
             let product = product.clone();
-            Some(RequestToRepository::SubscriptionForCustomer { user_id, customer, product })
-        },
-        _ => None
+            Some(RequestToRepository::SubscriptionForCustomer {
+                user_id,
+                customer,
+                product,
+            })
+        }
+        _ => None,
     }
 }
 
-pub fn customer_request_to_repository_request(request: &CustomerRequest) -> Option<RequestToRepository> {
+pub fn customer_request_to_repository_request(
+    request: &CustomerRequest,
+) -> Option<RequestToRepository> {
     match request {
-        CustomerRequest::NewNotification { user_id, customer, product, notification, .. }=> {
+        CustomerRequest::NewNotification {
+            user_id,
+            customer,
+            product,
+            notification,
+            ..
+        } => {
             let user_id = user_id.0;
             let customer = customer.clone();
             let product = product.clone();
             let notification = notification.clone();
-            Some(RequestToRepository::NotificationForClients { user_id, customer, product, notification } )
-        },
-        _ => None
+            Some(RequestToRepository::NotificationForClients {
+                user_id,
+                customer,
+                product,
+                notification,
+            })
+        }
+        _ => None,
     }
 }
 
@@ -415,5 +487,10 @@ pub fn notification_to_client_response(notification: &Notification) -> ClientRes
     let product = notification.product.clone();
     let notification = notification.text.clone();
 
-    ClientResponse::CustomerNotification { user_id, customer, product, notification }
+    ClientResponse::CustomerNotification {
+        user_id,
+        customer,
+        product,
+        notification,
+    }
 }

@@ -88,8 +88,8 @@ pub enum RequestToRepository {
         user_id: u32,
         customer: String,
         product: String,
-    }
-}    
+    },
+}
 
 impl ToString for ClientRequest {
     fn to_string(&self) -> String {

@@ -1,7 +1,7 @@
 [workspace]
 
 members = [
-    "message_queue",
+    "rabbitmq_client",
     "telegram_bot",
     "controller",
     "repository",

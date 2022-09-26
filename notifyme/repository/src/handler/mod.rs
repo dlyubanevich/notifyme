@@ -1,5 +1,7 @@
 use crate::RepositoryService;
-use domain::requests::{ClientRequestToRepository, CustomerRequestToRepository, RequestToRepository};
+use domain::requests::{
+    ClientRequestToRepository, CustomerRequestToRepository, RequestToRepository,
+};
 use lapin::{message::DeliveryResult, options::BasicAckOptions, ConsumerDelegate};
 use std::sync::Arc;
 use tokio::sync::Mutex;
@@ -13,11 +15,15 @@ impl MessageHandler {
     }
     pub async fn handle_client_request_to_repository(&mut self, message: String) {
         let request: ClientRequestToRepository = serde_json::from_str(&message).unwrap();
-        self.service.handle_client_request_to_repository(request).await;
+        self.service
+            .handle_client_request_to_repository(request)
+            .await;
     }
     pub async fn handle_customer_request_to_repository(&mut self, message: String) {
         let request: CustomerRequestToRepository = serde_json::from_str(&message).unwrap();
-        self.service.handle_customer_request_to_repository(request).await;
+        self.service
+            .handle_customer_request_to_repository(request)
+            .await;
     }
     pub async fn handle_request_to_repository(&mut self, message: String) {
         let request: RequestToRepository = serde_json::from_str(&message).unwrap();
@@ -46,7 +52,11 @@ pub fn client_request_delegate(
 
             // Do something with the delivery data (The message payload)
             let message = String::from_utf8_lossy(&delivery.data).to_string();
-            handler.lock().await.handle_client_request_to_repository(message).await;
+            handler
+                .lock()
+                .await
+                .handle_client_request_to_repository(message)
+                .await;
 
             delivery
                 .ack(BasicAckOptions::default())
@@ -77,7 +87,11 @@ pub fn customer_request_delegate(
 
             // Do something with the delivery data (The message payload)
             let message = String::from_utf8_lossy(&delivery.data).to_string();
-            handler.lock().await.handle_customer_request_to_repository(message).await;
+            handler
+                .lock()
+                .await
+                .handle_customer_request_to_repository(message)
+                .await;
 
             delivery
                 .ack(BasicAckOptions::default())
@@ -108,7 +122,11 @@ pub fn request_delegate(
 
             // Do something with the delivery data (The message payload)
             let message = String::from_utf8_lossy(&delivery.data).to_string();
-            handler.lock().await.handle_request_to_repository(message).await;
+            handler
+                .lock()
+                .await
+                .handle_request_to_repository(message)
+                .await;
 
             delivery
                 .ack(BasicAckOptions::default())

@@ -1,11 +1,12 @@
 use std::sync::Arc;
 
-use domain::{
-    requests::ClientRequest, models::UserId,
-};
+use domain::{models::UserId, requests::ClientRequest};
 use dotenv::dotenv;
-use message_queue::{Client, Publisher};
-use telegram_bot::{client::{MessageHandler, Service, response_delegate,state::State}, storage::StateStorage };
+use rabbitmq_client::{Client, Publisher};
+use telegram_bot::{
+    client::{response_delegate, state::State, MessageHandler, Service},
+    storage::StateStorage,
+};
 
 use teloxide::{
     dispatching::{update_listeners::webhooks, UpdateFilterExt},
@@ -117,7 +118,7 @@ async fn choose_customer(
         timestamp: msg.date.timestamp(),
     }
     .to_string();
-    
+
     params
         .publisher
         .lock()

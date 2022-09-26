@@ -3,10 +3,7 @@ use teloxide::{
     payloads::SendMessageSetters,
     prelude::AutoSend,
     requests::Requester,
-    types::{
-        ChatId, KeyboardButton, KeyboardMarkup,
-        KeyboardRemove,
-    },
+    types::{ChatId, KeyboardButton, KeyboardMarkup, KeyboardRemove},
     Bot,
 };
 
@@ -35,7 +32,7 @@ impl Service {
                     .send_message(ChatId(user_id.0 as i64), "Выберите поставщика:")
                     .reply_markup(KeyboardMarkup::new(keyboard))
                     .await?;
-                Ok(())    
+                Ok(())
             }
             ClientResponse::Products { user_id, products } => {
                 let mut keyboard: Vec<Vec<KeyboardButton>> = vec![];
@@ -47,17 +44,20 @@ impl Service {
                     keyboard.push(row);
                 }
                 self.bot
-                    .send_message(ChatId(user_id.0 as i64), "Выберите интересующий вас продукт:")
+                    .send_message(
+                        ChatId(user_id.0 as i64),
+                        "Выберите интересующий вас продукт:",
+                    )
                     .reply_markup(KeyboardMarkup::new(keyboard))
                     .await?;
-                Ok(())   
+                Ok(())
             }
             ClientResponse::SubscriptionSuccess { user_id } => {
                 self.bot
                     .send_message(ChatId(user_id.0 as i64), "Подписка успешно оформлена!")
                     .reply_markup(KeyboardRemove::new())
                     .await?;
-                Ok(())    
+                Ok(())
             }
             ClientResponse::SubscriptionFailure { user_id } => {
                 self.bot
@@ -67,14 +67,19 @@ impl Service {
                     )
                     .reply_markup(KeyboardRemove::new())
                     .await?;
-                Ok(())        
+                Ok(())
             }
-            ClientResponse::CustomerNotification { user_id, customer, product, notification } => {
+            ClientResponse::CustomerNotification {
+                user_id,
+                customer,
+                product,
+                notification,
+            } => {
                 let text = format!("Новое уведомление от поставщика [{customer}] для товара [{product}]: \n {notification}");
                 self.bot
                     .send_message(ChatId(user_id.0 as i64), text)
                     .await?;
-                Ok(())       
+                Ok(())
             }
         }
     }

@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::models::{Notification, UserId, Customer, Product};
+use crate::models::{Customer, Notification, Product, UserId};
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub enum ClientResponse {
@@ -20,10 +20,10 @@ pub enum ClientResponse {
     },
     CustomerNotification {
         user_id: UserId,
-        customer: String, 
-        product: String, 
-        notification: String,   
-    }
+        customer: String,
+        product: String,
+        notification: String,
+    },
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -46,9 +46,9 @@ pub enum CustomerResponse {
     NotificationFailure {
         user_id: UserId,
     },
-    ClientSubscription{
+    ClientSubscription {
         user_id: UserId,
-        customer: String, 
+        customer: String,
         product: String,
     },
 }

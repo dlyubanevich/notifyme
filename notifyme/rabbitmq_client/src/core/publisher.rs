@@ -7,7 +7,7 @@ impl Publisher {
     pub fn new(channel: Channel) -> Self {
         Publisher { channel }
     }
-    pub async fn publish_message(&mut self, exchange: &str, rooting_key: &str, message: String) {
+    pub async fn publish_message(&self, exchange: &str, rooting_key: &str, message: String) {
         self.channel
             .basic_publish(
                 exchange,
