@@ -1,4 +1,4 @@
-use crate::repository::common::errors::DatabaseErrors;
+use crate::repository::error::DatabaseErrors;
 use domain::models::{CustomerEventRecord, UserEventRecord};
 use sqlx::SqlitePool;
 
@@ -10,13 +10,13 @@ impl SqliteRepository {
     pub async fn new(url: &str) -> Result<Self, DatabaseErrors> {
         match SqlitePool::connect(url).await {
             Ok(pool) => Ok(SqliteRepository { pool }),
-            Err(error) => Err(DatabaseErrors::ConnectionError(error.to_string())),
+            Err(error) => Err(DatabaseErrors::ConnectionFailure(error.to_string())),
         }
     }
     pub async fn add_user_event(&mut self, record: UserEventRecord) -> Result<(), DatabaseErrors> {
-        let mut connection = match self.pool.acquire().await {
-            Ok(connection) => connection,
-            Err(error) => return Err(DatabaseErrors::ConnectionError(error.to_string())),
+        let mut transaction = match self.pool.begin().await {
+            Ok(transaction) => transaction,
+            Err(error) => return Err(DatabaseErrors::TransactionError(error.to_string())),
         };
 
         let result = sqlx::query!(
@@ -29,9 +29,13 @@ impl SqliteRepository {
             record.data,
             record.event
         )
-        .execute(&mut connection)
+        .execute(&mut transaction)
         .await;
-        connection.detach();
+
+        if let Err(error) = transaction.commit().await {
+            return Err(DatabaseErrors::TransactionError(error.to_string()));
+        }
+
         match result {
             Err(error) => Err(DatabaseErrors::RequestError(error.to_string())),
             Ok(_) => Ok(()),
@@ -42,9 +46,9 @@ impl SqliteRepository {
         &mut self,
         record: CustomerEventRecord,
     ) -> Result<(), DatabaseErrors> {
-        let mut connection = match self.pool.acquire().await {
-            Ok(connection) => connection,
-            Err(error) => return Err(DatabaseErrors::ConnectionError(error.to_string())),
+        let mut transaction = match self.pool.begin().await {
+            Ok(transaction) => transaction,
+            Err(error) => return Err(DatabaseErrors::TransactionError(error.to_string())),
         };
         let result = sqlx::query!(
             r#"
@@ -57,9 +61,11 @@ impl SqliteRepository {
             record.data,
             record.event
         )
-        .execute(&mut connection)
+        .execute(&mut transaction)
         .await;
-        connection.detach();
+        if let Err(error) = transaction.commit().await {
+            return Err(DatabaseErrors::TransactionError(error.to_string()));
+        }
         match result {
             Err(error) => Err(DatabaseErrors::RequestError(error.to_string())),
             Ok(_) => Ok(()),

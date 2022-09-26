@@ -32,10 +32,7 @@ impl Consumer {
             .await
             .unwrap();
         consumer.set_delegate(delegate);
-        Consumer {
-            channel,
-            consumer,
-        }
+        Consumer { channel, consumer }
     }
     pub async fn new2(
         channel: Channel,
@@ -52,10 +49,7 @@ impl Consumer {
             .await
             .unwrap();
         consumer.set_delegate(Self::delegate(handler));
-        Consumer {
-            channel,
-            consumer,
-        }
+        Consumer { channel, consumer }
     }
 
     fn delegate(

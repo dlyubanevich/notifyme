@@ -9,16 +9,18 @@ use tokio::sync::Mutex;
 #[tokio::main]
 async fn main() {
     dotenv().ok();
+    pretty_env_logger::init();
 
-    let url = std::env::var("DATABASE_URL").unwrap();
+    let rabbitmq_uri = std::env::var("RABBITMQ_URI").unwrap();
+    let database_url = std::env::var("DATABASE_URL").unwrap();
     let queue = std::env::var("HISTORY_QUEUE").unwrap();
 
-    let repository = SqliteRepository::new(&url).await.unwrap();
+    let repository = SqliteRepository::new(&database_url).await.unwrap();
     let service = Arc::new(Mutex::new(HistoryService::new(repository)));
 
     let client = RabbitMqClient::builder()
         .with_consumer(&queue, handle_messages(service))
-        .build("amqp://localhost:5672")
+        .build(&rabbitmq_uri)
         .await
         .unwrap();
 
