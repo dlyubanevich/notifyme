@@ -8,14 +8,19 @@ use crate::error::RabbitMqClientError;
 
 pub struct RabbitMqClient {
     connection: Connection,
-    publisher: Option<Arc<Publisher>>,
+    publisher: Option<Arc<Mutex<Publisher>>>,
     consumers: Vec<Consumer>,
 }
-impl<'a> RabbitMqClient {
-    pub fn builder() -> RabbitMqClientBuilder<'a> {
+impl RabbitMqClient {
+    pub fn builder() -> RabbitMqClientBuilder {
         RabbitMqClientBuilder::new()
     }
-    pub fn get_publisher(&self) -> Result<Arc<Publisher>, RabbitMqClientError> {
+    pub async fn add_consumer<F: IncomingMessageHandler + 'static>(&mut self, queue: & str, message_handler: F) {
+        let channel = create_channel(&mut self.connection).await.unwrap();
+        let consumer = Consumer::new2(channel, queue, Arc::new(Mutex::new(message_handler))).await;
+        self.consumers.push(consumer);
+    }
+    pub fn get_publisher(&self) -> Result<Arc<Mutex<Publisher>>, RabbitMqClientError> {
         match &self.publisher {
             Some(publisher) => Ok(Arc::clone(publisher)),
             None => Err(RabbitMqClientError::PublisherFailure),
@@ -30,29 +35,16 @@ impl<'a> RabbitMqClient {
     }
 }
 
-pub struct RabbitMqClientBuilder<'a> {
+pub struct RabbitMqClientBuilder {
     options: ConnectionProperties,
     publisher: Option<BuildPublisher>,
-    consumers: Vec<BuildConsumer<'a>>,
 }
-impl<'a> RabbitMqClientBuilder<'a> {
+impl RabbitMqClientBuilder {
     pub fn new() -> Self {
         RabbitMqClientBuilder::default()
     }
     pub fn with_publisher(mut self) -> Self {
         self.publisher = Some(BuildPublisher {});
-        self
-    }
-    pub fn with_consumer<F: IncomingMessageHandler + 'static>(
-        mut self,
-        queue: &'a str,
-        message_handler: F,
-    ) -> Self {
-        let consumer = BuildConsumer {
-            queue,
-            message_handler: Arc::new(Mutex::new(message_handler)),
-        };
-        self.consumers.push(consumer);
         self
     }
 
@@ -62,18 +54,12 @@ impl<'a> RabbitMqClientBuilder<'a> {
             Err(error) => return Err(RabbitMqClientError::BuildConnectionError(error.to_string())),
         };
         let publisher = if self.publisher.is_some() {
-            let channel = Self::create_channel(&mut connection).await?;
-            Some(Arc::new(Publisher::new(channel)))
+            let channel = create_channel(&mut connection).await?;
+            Some(Arc::new(Mutex::new(Publisher::new(channel))))
         } else {
             None
         };
-        let mut consumers = Vec::with_capacity(self.consumers.len());
-        for consumer in self.consumers.iter() {
-            let channel = Self::create_channel(&mut connection).await?;
-            consumers.push(
-                Consumer::new2(channel, consumer.queue, consumer.message_handler.clone()).await,
-            );
-        }
+        let consumers = Vec::new();
 
         Ok(RabbitMqClient {
             connection,
@@ -81,15 +67,17 @@ impl<'a> RabbitMqClientBuilder<'a> {
             consumers,
         })
     }
-    async fn create_channel(connection: &mut Connection) -> Result<Channel, RabbitMqClientError> {
-        match connection.create_channel().await {
-            Ok(channel) => Ok(channel),
-            Err(error) => Err(RabbitMqClientError::BuildChannelFailure(error.to_string())),
-        }
+
+}
+
+async fn create_channel(connection: &mut Connection) -> Result<Channel, RabbitMqClientError> {
+    match connection.create_channel().await {
+        Ok(channel) => Ok(channel),
+        Err(error) => Err(RabbitMqClientError::BuildChannelFailure(error.to_string())),
     }
 }
 
-impl<'a> Default for RabbitMqClientBuilder<'a> {
+impl Default for RabbitMqClientBuilder {
     fn default() -> Self {
         let options = ConnectionProperties::default()
             // Use tokio executor and reactor.
@@ -98,15 +86,9 @@ impl<'a> Default for RabbitMqClientBuilder<'a> {
             .with_reactor(tokio_reactor_trait::Tokio);
         RabbitMqClientBuilder {
             publisher: None,
-            consumers: vec![],
             options,
         }
     }
 }
 
 struct BuildPublisher;
-
-struct BuildConsumer<'a> {
-    queue: &'a str,
-    message_handler: Arc<Mutex<dyn IncomingMessageHandler>>,
-}

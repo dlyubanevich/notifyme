@@ -18,12 +18,12 @@ async fn main() {
     let repository = SqliteRepository::new(&database_url).await.unwrap();
     let service = Arc::new(Mutex::new(HistoryService::new(repository)));
 
-    let client = RabbitMqClient::builder()
-        .with_consumer(&queue, handle_messages(service))
+    let mut client = RabbitMqClient::builder()
         .build(&rabbitmq_uri)
         .await
         .unwrap();
-
+        
+    client.add_consumer(&queue, handle_messages(service)).await;    
     client.run();
 }
 

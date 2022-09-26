@@ -48,7 +48,7 @@ impl ControllerService {
         let repository_request =
             transform::client_request_to_repository_to_client_request(&request);
 
-        let mut publisher = self.publisher.lock().await;
+        let publisher = self.publisher.lock().await;
         publisher
             .publish_message(
                 &self.config.exchange,
@@ -90,7 +90,7 @@ impl ControllerService {
         let repository_request =
             transform::customer_request_to_repository_to_customer_request(&request);
 
-        let mut publisher = self.publisher.lock().await;
+        let publisher = self.publisher.lock().await;
         publisher
             .publish_message(
                 &self.config.exchange,
@@ -135,7 +135,7 @@ impl ControllerService {
         let response =
             transform::client_response_from_repository_to_client_response(&repository_response);
 
-        let mut publisher = self.publisher.lock().await;
+        let publisher = self.publisher.lock().await;
         publisher
             .publish_message(
                 &self.config.exchange,
@@ -160,7 +160,7 @@ impl ControllerService {
         let response =
             transform::customer_response_from_repository_to_customer_response(&repository_response);
 
-        let mut publisher = self.publisher.lock().await;
+        let publisher = self.publisher.lock().await;
         publisher
             .publish_message(
                 &self.config.exchange,
@@ -183,7 +183,7 @@ impl ControllerService {
     ) {
         let record = transform::response_from_repository_to_record(&repository_response);
 
-        let mut publisher = self.publisher.lock().await;
+        let publisher = self.publisher.lock().await;
         publisher
             .publish_message(
                 &self.config.exchange,
