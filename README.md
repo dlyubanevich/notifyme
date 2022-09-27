@@ -1,1 +1,1 @@
-# notify-project
+# notify me

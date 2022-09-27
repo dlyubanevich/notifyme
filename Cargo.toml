@@ -1,0 +1,10 @@
+[workspace]
+
+members = [
+    "amqp",
+    "telegram_bot",
+    "controller",
+    "repository",
+    "history",
+    "domain",
+]
