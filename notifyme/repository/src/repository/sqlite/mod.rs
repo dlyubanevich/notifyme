@@ -7,14 +7,14 @@ use crate::repository::common::errors::DatabaseErrors;
 
 pub struct SqliteRepository {
     pool: SqlitePool,
-    hash_data: HashData,
+    hash_data: CacheData,
 }
 
 impl SqliteRepository {
     pub async fn new(url: &str) -> Result<Self, DatabaseErrors> {
         match SqlitePool::connect(url).await {
             Ok(pool) => {
-                let hash_data = HashData::new(&pool).await;
+                let hash_data = CacheData::new(&pool).await;
                 Ok(SqliteRepository { pool, hash_data })
             }
             Err(error) => Err(DatabaseErrors::ConnectionProblem(error.to_string())),
@@ -312,17 +312,17 @@ impl SqliteRepository {
     }
 }
 
-struct HashData {
+struct CacheData {
     customers: HashMap<String, u32>,
     products: HashMap<String, HashMap<String, u32>>,
     users_customers: HashMap<String, u32>,
 }
-impl HashData {
+impl CacheData {
     async fn new(pool: &SqlitePool) -> Self {
         let customers = Self::get_all_customers(pool).await;
         let products = Self::get_all_products(pool).await;
         let users_customers = Self::get_users_customers(pool).await;
-        HashData {
+        CacheData {
             customers,
             products,
             users_customers,
