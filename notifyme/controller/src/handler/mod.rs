@@ -6,7 +6,7 @@ use domain::{
         ClientResponseFromRepository, CustomerResponseFromRepository, ResponseFromRepository,
     },
 };
-use rabbitmq_client::IncomingMessageHandler;
+use amqp::IncomingMessageHandler;
 use tokio::sync::Mutex;
 
 use crate::ControllerService;

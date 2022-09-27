@@ -1,6 +1,6 @@
 use controller::{Config, ControllerService, MessageHandler};
 use dotenv::dotenv;
-use rabbitmq_client::RabbitMqManager;
+use amqp::RabbitMqManager;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 

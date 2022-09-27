@@ -4,7 +4,7 @@ use domain::{
         ClientResponseFromRepository, CustomerResponseFromRepository, ResponseFromRepository,
     },
 };
-use rabbitmq_client::Publisher;
+use amqp::Publisher;
 
 use crate::{Config, SqliteRepository};
 

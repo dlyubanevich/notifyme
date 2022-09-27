@@ -40,11 +40,12 @@ impl RabbitMqManager {
                 let delivery = match delivery {
                     Ok(delivery) => delivery,
                     Err(error) => {
-                        log::error!("Failed to consume queue message {}", error);
+                        log::info!("Failed to consume queue message {}", error);
                         continue;
                     }
                 };
                 let message = String::from_utf8_lossy(&delivery.data).to_string();
+                log::info!("Received message from queue [{}]:[{}]", consumer.queue(), message);
                 message_handler.handle_message(message).await;
                 delivery
                     .ack(BasicAckOptions::default())

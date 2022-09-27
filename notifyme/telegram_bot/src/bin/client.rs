@@ -2,7 +2,7 @@ use std::{net::SocketAddr, sync::Arc};
 
 use domain::{models::UserId, requests::ClientRequest};
 use dotenv::dotenv;
-use rabbitmq_client::{Publisher, RabbitMqManager};
+use amqp::{Publisher, RabbitMqManager};
 use telegram_bot::{
     client::{state::State, ClientService, MessageHandler},
     storage::StateStorage,

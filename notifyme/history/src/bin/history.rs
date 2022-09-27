@@ -1,6 +1,6 @@
 use dotenv::dotenv;
 use history::{repository::SqliteRepository, Config, HistoryService, MessageHandler};
-use rabbitmq_client::RabbitMqManager;
+use amqp::RabbitMqManager;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 

@@ -6,7 +6,7 @@ use domain::{
         ResponseFromRepository,
     },
 };
-use rabbitmq_client::Publisher;
+use amqp::Publisher;
 
 use crate::{Config, Transformer};
 

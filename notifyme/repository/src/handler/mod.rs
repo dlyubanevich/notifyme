@@ -2,7 +2,7 @@ use crate::RepositoryService;
 use domain::requests::{
     ClientRequestToRepository, CustomerRequestToRepository, RequestToRepository,
 };
-use rabbitmq_client::IncomingMessageHandler;
+use amqp::IncomingMessageHandler;
 use std::sync::Arc;
 use tokio::sync::Mutex;
 

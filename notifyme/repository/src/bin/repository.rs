@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use dotenv::dotenv;
-use rabbitmq_client::RabbitMqManager;
+use amqp::RabbitMqManager;
 use repository::{Config, MessageHandler, RepositoryService, SqliteRepository};
 use tokio::sync::Mutex;
 

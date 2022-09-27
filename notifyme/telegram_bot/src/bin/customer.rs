@@ -5,7 +5,7 @@ use domain::{
     requests::CustomerRequest,
 };
 use dotenv::dotenv;
-use rabbitmq_client::{Publisher, RabbitMqManager};
+use amqp::{Publisher, RabbitMqManager};
 use serde::{Deserialize, Serialize};
 use telegram_bot::{
     customer::{state::State, CustomerService, MessageHandler},

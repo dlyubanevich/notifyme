@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use domain::responses::CustomerResponse;
-use rabbitmq_client::IncomingMessageHandler;
+use amqp::IncomingMessageHandler;
 use tokio::sync::Mutex;
 
 use crate::customer::CustomerService;

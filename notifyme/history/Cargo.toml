@@ -16,5 +16,5 @@ serde = "1.0.*"
 sqlx = { version = "0.6.*", features = [ "runtime-tokio-rustls", "sqlite" ] }
 log = "0.4.*"
 pretty_env_logger = "0.4.*"
-rabbitmq_client = { path = "../rabbitmq_client"}
+amqp = { path = "../amqp"}
 domain = { path = "../domain"}
