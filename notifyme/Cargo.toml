@@ -1,0 +1,10 @@
+[workspace]
+
+members = [
+    "rabbitmq_client",
+    "telegram_bot",
+    "controller",
+    "repository",
+    "history",
+    "domain",
+]
