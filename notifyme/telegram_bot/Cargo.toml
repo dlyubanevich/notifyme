@@ -10,10 +10,9 @@ teloxide = { version = "0.10.*", features = ["macros", "auto-send", "webhooks-ax
 log = "0.4.*"
 pretty_env_logger = "0.4.*"
 dotenv = "0.15.*"
+envy = "0.4.*"
 url = "2.3.*"
-lapin = "2.*"
 tokio = { version = "1.21.*", features = ["macros", "rt-multi-thread"] }
-serde_derive = "1.0.*"
 serde_json = "1.0.*"
 serde = "1.0.*"
 rabbitmq_client = { path = "../rabbitmq_client"}

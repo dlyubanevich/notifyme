@@ -1,16 +1,16 @@
-use std::{collections::HashMap, sync::Arc};
+use std::{collections::HashMap, net::SocketAddr, sync::Arc};
 
 use domain::{
     models::{Customer, UserId},
     requests::CustomerRequest,
 };
 use dotenv::dotenv;
-use rabbitmq_client::{Client, Publisher};
+use rabbitmq_client::{Publisher, RabbitMqManager};
 use serde::{Deserialize, Serialize};
 use telegram_bot::{
-    customer::{response_delegate, state::State, MessageHandler, Service},
+    customer::{state::State, CustomerService, MessageHandler},
     storage::StateStorage,
-    HandlerResult,
+    Config, HandlerResult,
 };
 use teloxide::{
     dispatching::{update_listeners::webhooks, UpdateFilterExt},
@@ -30,36 +30,42 @@ use url::Url;
 
 #[tokio::main]
 async fn main() {
-    std::env::set_var("RUST_APP_LOG", "info");
-    pretty_env_logger::init_custom_env("RUST_APP_LOG");
+    dotenv().ok();
+    pretty_env_logger::init();
 
     log::info!("Starting purchase bot...");
 
-    dotenv().ok();
+    let config = envy::from_env::<Config>().unwrap();
 
-    let token = std::env::var("CUSTOMER_TOKEN").unwrap();
-
-    let bot = Bot::new(token).auto_send();
-    let addr = ([127, 0, 0, 1], 8081).into();
-    let url = Url::parse("https://7aba-95-27-196-93.eu.ngrok.io").unwrap();
-    let listener = webhooks::axum(bot.clone(), webhooks::Options::new(addr, url))
+    let bot = Bot::new(&config.telegram_customer_token).auto_send();
+    let address: SocketAddr = config.telegram_customer_address.parse().unwrap();
+    let url = Url::parse(&config.telegram_customer_url).unwrap();
+    let listener = webhooks::axum(bot.clone(), webhooks::Options::new(address, url))
         .await
         .expect("Couldn't setup webhook");
 
     let state_storage = StateStorage::<State>::new();
     let authorized_customers = Arc::new(Mutex::new(HashMap::<ChatId, Customer>::new()));
-    let service = Service::new(
+    let service = Arc::new(Mutex::new(CustomerService::new(
         bot.clone(),
         state_storage.clone(),
         authorized_customers.clone(),
-    );
-    let queue_handler = Arc::new(Mutex::new(MessageHandler::new(service)));
+    )));
 
-    let response_queue = std::env::var("CUSTOMER_RESPONSE_QUEUE").unwrap();
-    let mut client = Client::new("amqp://localhost:5672").await;
-    client
-        .with_consumer(&response_queue, response_delegate(queue_handler))
-        .await;
+    let mut manager = RabbitMqManager::builder()
+        .build(&config.amqp_address)
+        .await
+        .unwrap();
+    manager
+        .add_consumer(
+            &config.customer_response_queue,
+            MessageHandler::customer_response(service.clone()),
+        )
+        .await
+        .unwrap();
+
+    let publisher = Arc::new(Mutex::new(manager.get_publisher().await.unwrap()));
+    let params = ConfigParams::new(config, authorized_customers, publisher);
 
     let message_handler = Update::filter_message().endpoint(message_handler);
     let callback_query_handler = Update::filter_callback_query().endpoint(callback_handler);
@@ -67,8 +73,6 @@ async fn main() {
     let handler = dptree::entry()
         .branch(message_handler)
         .branch(callback_query_handler);
-
-    let params = ConfigParams::new(authorized_customers, client.get_publisher());
 
     Dispatcher::builder(bot, handler)
         .dependencies(dptree::deps![state_storage, params])
@@ -90,11 +94,12 @@ struct ConfigParams {
 }
 impl ConfigParams {
     fn new(
+        config: Config,
         authorized_customers: Arc<Mutex<HashMap<ChatId, Customer>>>,
         publisher: Arc<Mutex<Publisher>>,
     ) -> Self {
-        let exchange = std::env::var("EXCHANGE").unwrap();
-        let request_queue = std::env::var("CUSTOMER_REQUEST_QUEUE").unwrap();
+        let exchange = config.exchange;
+        let request_queue = config.customer_request_queue;
         ConfigParams {
             authorized_customers,
             publisher,
@@ -110,12 +115,11 @@ async fn message_handler(
     storage: Arc<StateStorage<State>>,
     params: ConfigParams,
 ) -> HandlerResult {
-    log::info!("Message from user [{}]", msg.chat.id.0);
     let state = match storage.get_state(&msg.chat.id).await {
         Some(state) => state,
         None => State::Start,
     };
-
+    log::info!("Message from user [{}], state: {:?}", msg.chat.id, state);
     match state {
         State::Start => start(bot, msg, storage, params).await?,
         State::Authorization => authorization(msg, params).await?,
@@ -169,7 +173,8 @@ async fn authorization(msg: Message, params: ConfigParams) -> HandlerResult {
         .lock()
         .await
         .publish_message(&params.exchange, &params.request_queue, message)
-        .await;
+        .await
+        .unwrap();
     Ok(())
 }
 async fn choose_command(bot: AutoSend<Bot>, msg: Message) -> HandlerResult {
@@ -230,7 +235,8 @@ async fn send_notification(
         .lock()
         .await
         .publish_message(&params.exchange, &params.request_queue, message)
-        .await;
+        .await
+        .unwrap();
 
     Ok(())
 }
@@ -245,8 +251,6 @@ async fn callback_handler(
 
         if let Some(message) = q.message {
             bot.delete_message(message.chat.id, message.id).await?;
-            let text = message.text().unwrap().to_owned();
-            bot.send_message(message.chat.id, text).await?;
             let command: Command = data.into();
             match command {
                 Command::AddNotification => {
@@ -271,7 +275,8 @@ async fn callback_handler(
                         .lock()
                         .await
                         .publish_message(&params.exchange, &params.request_queue, message)
-                        .await;
+                        .await
+                        .unwrap();
                 }
             };
         }

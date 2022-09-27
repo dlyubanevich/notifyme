@@ -1,11 +1,12 @@
-use std::sync::Arc;
+use std::{net::SocketAddr, sync::Arc};
 
 use domain::{models::UserId, requests::ClientRequest};
 use dotenv::dotenv;
-use rabbitmq_client::{Client, Publisher};
+use rabbitmq_client::{Publisher, RabbitMqManager};
 use telegram_bot::{
-    client::{response_delegate, state::State, MessageHandler, Service},
+    client::{state::State, ClientService, MessageHandler},
     storage::StateStorage,
+    Config,
 };
 
 use teloxide::{
@@ -22,37 +23,40 @@ use url::Url;
 
 #[tokio::main]
 async fn main() {
-    std::env::set_var("RUST_APP_LOG", "info");
-    pretty_env_logger::init_custom_env("RUST_APP_LOG");
+    dotenv().ok();
+    pretty_env_logger::init();
 
     log::info!("Starting purchase bot...");
 
-    dotenv().ok();
+    let config = envy::from_env::<Config>().unwrap();
 
-    let token = std::env::var("CLIENT_TOKEN").unwrap();
-
-    let bot = Bot::new(token).auto_send();
-    let addr = ([127, 0, 0, 1], 8080).into();
-    let url = Url::parse("https://06df-95-27-196-93.eu.ngrok.io").unwrap();
-    let listener = webhooks::axum(bot.clone(), webhooks::Options::new(addr, url))
+    let bot = Bot::new(&config.telegram_client_token).auto_send();
+    let address: SocketAddr = config.telegram_client_address.parse().unwrap();
+    let url = Url::parse(&config.telegram_client_url).unwrap();
+    let listener = webhooks::axum(bot.clone(), webhooks::Options::new(address, url))
         .await
         .expect("Couldn't setup webhook");
 
-    let service = Service::new(bot.clone());
-    let queue_handler = Arc::new(Mutex::new(MessageHandler::new(service)));
+    let service = Arc::new(Mutex::new(ClientService::new(bot.clone())));
 
-    let response_queue = std::env::var("CLIENT_RESPONSE_QUEUE").unwrap();
-    let mut client = Client::new("amqp://localhost:5672").await;
-    client
-        .with_consumer(&response_queue, response_delegate(queue_handler))
-        .await;
+    let mut manager = RabbitMqManager::builder()
+        .build(&config.amqp_address)
+        .await
+        .unwrap();
+    manager
+        .add_consumer(
+            &config.client_response_queue,
+            MessageHandler::client_response(service.clone()),
+        )
+        .await
+        .unwrap();
 
-    let message_handler = Update::filter_message().endpoint(message_handler);
-
-    let handler = dptree::entry().branch(message_handler);
-
+    let publisher = Arc::new(Mutex::new(manager.get_publisher().await.unwrap()));
+    let params = ConfigParams::new(config, publisher);
     let state_storage = StateStorage::<State>::new();
-    let params = ConfigParams::new(client.get_publisher());
+
+    let telegram_message_handler = Update::filter_message().endpoint(message_handler);
+    let handler = dptree::entry().branch(telegram_message_handler);
 
     Dispatcher::builder(bot, handler)
         .dependencies(dptree::deps![state_storage, params])
@@ -72,9 +76,9 @@ struct ConfigParams {
     request_queue: String,
 }
 impl ConfigParams {
-    fn new(publisher: Arc<Mutex<Publisher>>) -> Self {
-        let exchange = std::env::var("EXCHANGE").unwrap();
-        let request_queue = std::env::var("CLIENT_REQUEST_QUEUE").unwrap();
+    fn new(config: Config, publisher: Arc<Mutex<Publisher>>) -> Self {
+        let exchange = config.exchange;
+        let request_queue = config.client_request_queue;
         ConfigParams {
             publisher,
             exchange,
@@ -86,7 +90,7 @@ impl ConfigParams {
 type HandlerResult = Result<(), Box<dyn std::error::Error + Send + Sync>>;
 
 async fn message_handler(
-    bot: AutoSend<Bot>,
+    _bot: AutoSend<Bot>,
     msg: Message,
     storage: Arc<StateStorage<State>>,
     params: ConfigParams,
@@ -124,7 +128,8 @@ async fn choose_customer(
         .lock()
         .await
         .publish_message(&params.exchange, &params.request_queue, message)
-        .await;
+        .await
+        .unwrap();
     storage.set_state(msg.chat.id, State::Customer).await;
     Ok(())
 }
@@ -147,7 +152,8 @@ async fn choose_product(
         .lock()
         .await
         .publish_message(&params.exchange, &params.request_queue, message)
-        .await;
+        .await
+        .unwrap();
     storage
         .set_state(msg.chat.id, State::Product { customer })
         .await;
@@ -174,7 +180,8 @@ async fn add_subscription(
         .lock()
         .await
         .publish_message(&params.exchange, &params.request_queue, message)
-        .await;
+        .await
+        .unwrap();
     storage.set_state(msg.chat.id, State::End).await;
     Ok(())
 }

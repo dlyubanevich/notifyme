@@ -12,19 +12,19 @@ use tokio::sync::Mutex;
 
 use crate::{common::HandlerResult, customer::state::State, storage::StateStorage};
 
-pub struct Service {
+pub struct CustomerService {
     bot: AutoSend<Bot>,
     state_storage: Arc<StateStorage<State>>,
     authorized_customers: Arc<Mutex<HashMap<ChatId, Customer>>>,
 }
 
-impl Service {
+impl CustomerService {
     pub fn new(
         bot: AutoSend<Bot>,
         state_storage: Arc<StateStorage<State>>,
         authorized_customers: Arc<Mutex<HashMap<ChatId, Customer>>>,
     ) -> Self {
-        Service {
+        CustomerService {
             bot,
             state_storage,
             authorized_customers,

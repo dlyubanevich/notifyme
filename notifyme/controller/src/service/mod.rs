@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use domain::{
     models::UserId,
     requests::{ClientRequest, CustomerRequest},
@@ -9,121 +7,106 @@ use domain::{
     },
 };
 use rabbitmq_client::Publisher;
-use serde::Deserialize;
-use tokio::sync::Mutex;
 
-use crate::transform;
+use crate::{Config, Transformer};
 
 pub struct ControllerService {
     config: Config,
-    publisher: Arc<Mutex<Publisher>>,
+    publisher: Publisher,
 }
 
 impl ControllerService {
-    pub fn new(publisher: Arc<Mutex<Publisher>>) -> Self {
-        let exchange = std::env::var("EXCHANGE").unwrap();
-        let repository_client_request_queue =
-            std::env::var("CLIENT_REPOSITORY_REQUEST_QUEUE").unwrap();
-        let repository_customer_request_queue =
-            std::env::var("CUSTOMER_REPOSITORY_REQUEST_QUEUE").unwrap();
-        let repository_request_queue = std::env::var("REPOSITORY_REQUEST_QUEUE").unwrap();
-        let history_queue = std::env::var("HISTORY_QUEUE").unwrap();
-        let client_response_queue = std::env::var("CLIENT_RESPONSE_QUEUE").unwrap();
-        let customer_response_queue = std::env::var("CUSTOMER_RESPONSE_QUEUE").unwrap();
-        let config = Config {
-            exchange,
-            repository_client_request_queue,
-            repository_customer_request_queue,
-            repository_request_queue,
-            history_queue,
-            client_response_queue,
-            customer_response_queue,
-        };
-
+    pub fn new(config: Config, publisher: Publisher) -> Self {
         Self { config, publisher }
     }
 
     pub async fn handle_client_request(&mut self, request: ClientRequest) {
-        let record = transform::client_request_to_record(&request);
+        let record = Transformer::client_request_to_record(&request);
         let repository_request =
-            transform::client_request_to_repository_to_client_request(&request);
+            Transformer::client_request_to_repository_to_client_request(&request);
 
-        let publisher = self.publisher.lock().await;
-        publisher
+        self.publisher
             .publish_message(
                 &self.config.exchange,
                 &self.config.history_queue,
                 record.to_string(),
             )
-            .await;
-        publisher
+            .await
+            .unwrap();
+        self.publisher
             .publish_message(
                 &self.config.exchange,
-                &self.config.repository_client_request_queue,
+                &self.config.client_repository_request_queue,
                 repository_request.to_string(),
             )
-            .await;
+            .await
+            .unwrap();
 
         if let Some(request_to_repository) =
-            transform::client_request_to_repository_request(&request)
+            Transformer::client_request_to_repository_request(&request)
         {
-            let record = transform::request_to_repository_to_record(&request_to_repository);
-            publisher
+            let record = Transformer::request_to_repository_to_record(&request_to_repository);
+            self.publisher
                 .publish_message(
                     &self.config.exchange,
                     &self.config.history_queue,
                     record.to_string(),
                 )
-                .await;
-            publisher
+                .await
+                .unwrap();
+            self.publisher
                 .publish_message(
                     &self.config.exchange,
                     &self.config.repository_request_queue,
                     request_to_repository.to_string(),
                 )
-                .await;
+                .await
+                .unwrap();
         }
     }
 
     pub async fn handle_customer_request(&mut self, request: CustomerRequest) {
-        let record = transform::customer_request_to_record(&request);
+        let record = Transformer::customer_request_to_record(&request);
         let repository_request =
-            transform::customer_request_to_repository_to_customer_request(&request);
+            Transformer::customer_request_to_repository_to_customer_request(&request);
 
-        let publisher = self.publisher.lock().await;
-        publisher
+        self.publisher
             .publish_message(
                 &self.config.exchange,
                 &self.config.history_queue,
                 record.to_string(),
             )
-            .await;
-        publisher
+            .await
+            .unwrap();
+        self.publisher
             .publish_message(
                 &self.config.exchange,
-                &self.config.repository_customer_request_queue,
+                &self.config.customer_repository_request_queue,
                 repository_request.to_string(),
             )
-            .await;
+            .await
+            .unwrap();
 
         if let Some(request_to_repository) =
-            transform::customer_request_to_repository_request(&request)
+            Transformer::customer_request_to_repository_request(&request)
         {
-            let record = transform::request_to_repository_to_record(&request_to_repository);
-            publisher
+            let record = Transformer::request_to_repository_to_record(&request_to_repository);
+            self.publisher
                 .publish_message(
                     &self.config.exchange,
                     &self.config.history_queue,
                     record.to_string(),
                 )
-                .await;
-            publisher
+                .await
+                .unwrap();
+            self.publisher
                 .publish_message(
                     &self.config.exchange,
                     &self.config.repository_request_queue,
                     request_to_repository.to_string(),
                 )
-                .await;
+                .await
+                .unwrap();
         }
     }
 
@@ -131,78 +114,82 @@ impl ControllerService {
         &mut self,
         repository_response: ClientResponseFromRepository,
     ) {
-        let record = transform::client_response_from_repository_to_record(&repository_response);
+        let record = Transformer::client_response_from_repository_to_record(&repository_response);
         let response =
-            transform::client_response_from_repository_to_client_response(&repository_response);
+            Transformer::client_response_from_repository_to_client_response(&repository_response);
 
-        let publisher = self.publisher.lock().await;
-        publisher
+        self.publisher
             .publish_message(
                 &self.config.exchange,
                 &self.config.history_queue,
                 record.to_string(),
             )
-            .await;
-        publisher
+            .await
+            .unwrap();
+        self.publisher
             .publish_message(
                 &self.config.exchange,
                 &self.config.client_response_queue,
                 response.to_string(),
             )
-            .await;
+            .await
+            .unwrap();
     }
 
     pub async fn handle_customer_response_from_repository(
         &mut self,
         repository_response: CustomerResponseFromRepository,
     ) {
-        let record = transform::customer_response_from_repository_to_record(&repository_response);
-        let response =
-            transform::customer_response_from_repository_to_customer_response(&repository_response);
+        let record = Transformer::customer_response_from_repository_to_record(&repository_response);
+        let response = Transformer::customer_response_from_repository_to_customer_response(
+            &repository_response,
+        );
 
-        let publisher = self.publisher.lock().await;
-        publisher
+        self.publisher
             .publish_message(
                 &self.config.exchange,
                 &self.config.history_queue,
                 record.to_string(),
             )
-            .await;
-        publisher
+            .await
+            .unwrap();
+        self.publisher
             .publish_message(
                 &self.config.exchange,
                 &self.config.customer_response_queue,
                 response.to_string(),
             )
-            .await;
+            .await
+            .unwrap();
     }
 
     pub async fn handle_response_from_repository(
         &mut self,
         repository_response: ResponseFromRepository,
     ) {
-        let record = transform::response_from_repository_to_record(&repository_response);
+        let record = Transformer::response_from_repository_to_record(&repository_response);
 
-        let publisher = self.publisher.lock().await;
-        publisher
+        self.publisher
             .publish_message(
                 &self.config.exchange,
                 &self.config.history_queue,
                 record.to_string(),
             )
-            .await;
+            .await
+            .unwrap();
 
         match repository_response {
             ResponseFromRepository::Notifications(notifications) => {
                 for notification in notifications {
-                    let response = transform::notification_to_client_response(&notification);
-                    publisher
+                    let response = Transformer::notification_to_client_response(&notification);
+                    self.publisher
                         .publish_message(
                             &self.config.exchange,
                             &self.config.client_response_queue,
                             response.to_string(),
                         )
-                        .await;
+                        .await
+                        .unwrap();
                 }
             }
             ResponseFromRepository::Subscription {
@@ -216,25 +203,15 @@ impl ControllerService {
                     customer,
                     product,
                 };
-                publisher
+                self.publisher
                     .publish_message(
                         &self.config.exchange,
                         &self.config.customer_response_queue,
                         response.to_string(),
                     )
-                    .await;
+                    .await
+                    .unwrap();
             }
         }
     }
-}
-
-#[derive(Deserialize, Debug)]
-struct Config {
-    exchange: String,
-    repository_client_request_queue: String,
-    repository_customer_request_queue: String,
-    repository_request_queue: String,
-    history_queue: String,
-    client_response_queue: String,
-    customer_response_queue: String,
 }

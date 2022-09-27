@@ -1,10 +1,8 @@
-mod core;
 mod error;
+mod handler;
+mod manager;
+mod publisher;
 
-pub use crate::core::Client;
-pub use crate::core::IncomingMessageHandler;
-pub use crate::core::Publisher;
-pub use crate::core::RabbitMqClient;
-
-#[cfg(test)]
-mod tests {}
+pub use crate::handler::IncomingMessageHandler;
+pub use crate::manager::RabbitMqManager;
+pub use crate::publisher::Publisher;

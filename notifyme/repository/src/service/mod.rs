@@ -1,5 +1,3 @@
-use std::sync::Arc;
-
 use domain::{
     requests::{ClientRequestToRepository, CustomerRequestToRepository, RequestToRepository},
     responses::{
@@ -7,30 +5,17 @@ use domain::{
     },
 };
 use rabbitmq_client::Publisher;
-use serde::Deserialize;
-use tokio::sync::Mutex;
 
-use crate::SqliteRepository;
+use crate::{Config, SqliteRepository};
 
 pub struct RepositoryService {
     config: Config,
     repository: SqliteRepository,
-    publisher: Arc<Mutex<Publisher>>,
+    publisher: Publisher,
 }
 
 impl RepositoryService {
-    pub fn new(repository: SqliteRepository, publisher: Arc<Mutex<Publisher>>) -> Self {
-        let exchange = std::env::var("EXCHANGE").unwrap();
-        let client_response_queue = std::env::var("CLIENT_REPOSITORY_RESPONSE_QUEUE").unwrap();
-        let customer_response_queue = std::env::var("CUSTOMER_REPOSITORY_RESPONSE_QUEUE").unwrap();
-        let response_queue = std::env::var("REPOSITORY_RESPONSE_QUEUE").unwrap();
-        let config = Config {
-            exchange,
-            client_response_queue,
-            customer_response_queue,
-            response_queue,
-        };
-
+    pub fn new(config: Config, repository: SqliteRepository, publisher: Publisher) -> Self {
         Self {
             config,
             repository,
@@ -64,14 +49,14 @@ impl RepositoryService {
             }
         };
 
-        let mut publisher = self.publisher.lock().await;
-        publisher
+        self.publisher
             .publish_message(
                 &self.config.exchange,
-                &self.config.client_response_queue,
+                &self.config.client_repository_response_queue,
                 response.to_string(),
             )
-            .await;
+            .await
+            .unwrap();
     }
     pub async fn handle_customer_request_to_repository(
         &mut self,
@@ -113,14 +98,14 @@ impl RepositoryService {
             }
         };
 
-        let mut publisher = self.publisher.lock().await;
-        publisher
+        self.publisher
             .publish_message(
                 &self.config.exchange,
-                &self.config.customer_response_queue,
+                &self.config.customer_repository_response_queue,
                 response.to_string(),
             )
-            .await;
+            .await
+            .unwrap();
     }
     pub async fn handle_request_to_repository(&mut self, request: RequestToRepository) {
         let response = match request {
@@ -153,21 +138,13 @@ impl RepositoryService {
             }
         };
 
-        let mut publisher = self.publisher.lock().await;
-        publisher
+        self.publisher
             .publish_message(
                 &self.config.exchange,
-                &self.config.response_queue,
+                &self.config.repository_response_queue,
                 response.to_string(),
             )
-            .await;
+            .await
+            .unwrap();
     }
-}
-
-#[derive(Deserialize, Debug)]
-struct Config {
-    exchange: String,
-    client_response_queue: String,
-    customer_response_queue: String,
-    response_queue: String,
 }

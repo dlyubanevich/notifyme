@@ -1,7 +1,7 @@
 use std::{future::Future, pin::Pin};
 
 pub trait IncomingMessageHandler: Send + Sync {
-    fn handle_message(&mut self, message: String) -> Pin<Box<dyn Future<Output = ()> + Send>>;
+    fn handle_message(&self, message: String) -> Pin<Box<dyn Future<Output = ()> + Send>>;
 }
 
 impl<
@@ -9,7 +9,7 @@ impl<
         MessageHandler: Fn(String) -> F + Send + Sync + 'static,
     > IncomingMessageHandler for MessageHandler
 {
-    fn handle_message(&mut self, message: String) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+    fn handle_message(&self, message: String) -> Pin<Box<dyn Future<Output = ()> + Send>> {
         Box::pin(self(message))
     }
 }

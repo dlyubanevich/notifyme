@@ -9,13 +9,13 @@ use teloxide::{
 
 use crate::common::HandlerResult;
 
-pub struct Service {
+pub struct ClientService {
     bot: AutoSend<Bot>,
 }
 
-impl Service {
+impl ClientService {
     pub fn new(bot: AutoSend<Bot>) -> Self {
-        Service { bot }
+        ClientService { bot }
     }
     pub async fn handle_response(&mut self, response: ClientResponse) -> HandlerResult {
         match response {
